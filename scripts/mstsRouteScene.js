@@ -230,7 +230,9 @@ export class MstsRouteScene {
       const underframe = new THREE.Mesh(underframeGeometry, underframeMaterial);
       underframe.position.y = 0.55;
       car.add(underframe);
-      car.userData.trainOffset = 25 + index * 25.8;
+      // 以司机视点为列车前端参考。HXD1C 车体与连挂间距计入首辆客车中心距，
+      // 避免后部瞭望镜头落入第一辆客车端面。
+      car.userData.trainOffset = 33 + index * 25.8;
       this.routeRoot.add(car);
       this.passengerCars.push(car);
     }
@@ -736,12 +738,12 @@ export class MstsRouteScene {
       front: 0,
       left: THREE.MathUtils.degToRad(65),
       right: THREE.MathUtils.degToRad(-65),
-      rearLeft: THREE.MathUtils.degToRad(180),
-      rearRight: THREE.MathUtils.degToRad(-180),
+      rearLeft: THREE.MathUtils.degToRad(165),
+      rearRight: THREE.MathUtils.degToRad(-165),
     };
     const pitchOffsets = { front: -0.22, left: -0.035, right: -0.035, rearLeft: -0.04, rearRight: -0.04 };
-    const lateralOffsets = { front: 0, left: -0.7, right: 0.7, rearLeft: -5, rearRight: 5 };
-    const longitudinalOffsets = { front: 0, left: 0, right: 0, rearLeft: -3.2, rearRight: -3.2 };
+    const lateralOffsets = { front: 0, left: -0.7, right: 0.7, rearLeft: -3.2, rearRight: 3.2 };
+    const longitudinalOffsets = { front: 0, left: 0, right: 0, rearLeft: -1.8, rearRight: -1.8 };
     const right = new THREE.Vector3(this.forward.z, 0, -this.forward.x);
     this.camera.position.copy(position);
     this.camera.position.addScaledVector(right, lateralOffsets[this.view] || 0);

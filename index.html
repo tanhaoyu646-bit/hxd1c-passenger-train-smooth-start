@@ -2,75 +2,79 @@
 <html lang="zh-CN">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,interactive-widget=resizes-content">
   <meta name="theme-color" content="#071722">
-  <title>旅客列车平稳起动虚拟实训</title>
-  <link rel="stylesheet" href="./styles/smooth-start.css?rev=1">
+  <meta name="mobile-web-app-capable" content="yes">
+  <title>K2026次旅客列车平稳起动虚拟实训</title>
+  <link rel="stylesheet" href="./styles/smooth-start.css?rev=smooth-start-v2">
+  <link rel="stylesheet" href="./styles/credential-training.css?rev=smooth-start-v2">
 </head>
 <body>
+  <div id="landscape-gate" class="landscape-gate" hidden aria-modal="true" role="dialog">
+    <div class="landscape-card"><h2>横屏进入仿真实训</h2><p>请将手机横向旋转，以便同时观察驾驶台、线路和操纵提示。</p><button id="enter-training" type="button">进入训练</button></div>
+  </div>
+  <div id="rotate-tip" class="rotate-tip">请将手机横向旋转后继续训练</div>
+
   <header class="topbar">
-    <div><h1>旅客列车平稳起动虚拟实训</h1><p>HXD1C 驾驶台功能原型 · 既有发车作业线路载体</p></div>
-    <div class="prototype-tag">功能原型</div>
+    <div><h1>K2026次旅客列车平稳起动虚拟实训</h1><p>完整发车准备、行车凭证确认与全列平稳起动教学</p></div>
+    <div class="prototype-tag">K2026次教学编组</div>
   </header>
+
   <main class="app-shell">
-    <section class="workspace">
-      <div class="stage" id="stage" aria-label="机车驾驶台与线路场景">
-        <canvas id="route-scene" class="route-scene"></canvas>
-        <img id="cab-layer" class="cab-layer" src="./assets/archive-cabview/HXD1C_front.png" alt="HXD1C驾驶台">
+    <section class="workspace stage-wrap">
+      <div class="stage" id="stage" aria-label="HXD1C驾驶台与既有发车作业线路">
+        <canvas id="route-scene" class="route-scene" aria-label="随列车里程移动的三维线路"></canvas>
+        <img id="cab" class="cab-layer" src="./assets/archive-cabview/HXD1C_front.png" alt="HXD1C驾驶台功能载体">
         <div id="overlay" class="overlay"></div>
         <div class="stage-toolbar">
-          <button id="workflow-toggle" type="button">流程 <b id="step-counter">0/14</b></button>
-          <button id="training-toggle" type="button">教学与考评</button>
+          <button id="workflow-toggle" type="button" aria-controls="workflow-drawer">流程 <b data-workflow-progress>0/19</b></button>
+          <button id="training-toggle" type="button" aria-controls="training-drawer">教学考评与场景</button>
         </div>
-        <div class="look-progress" id="look-progress" hidden><span></span><b>后部瞭望</b></div>
+        <div class="coach-progress" aria-label="全列起动进度"><span id="coach-progress"></span><b>全列起动</b></div>
+        <button id="exit-immersive" class="mobile-fullscreen-exit" type="button" aria-label="退出全屏">×</button>
       </div>
-      <nav class="view-tabs" aria-label="视角切换">
+
+      <nav class="view-tabs tabs" aria-label="驾驶室观察视角">
         <button type="button" data-view="front" class="active">正面驾驶台</button>
-        <button type="button" data-view="rearLeft">左侧后部瞭望</button>
-        <button type="button" data-view="rearRight">右侧后部瞭望</button>
+        <button type="button" data-view="left">左侧窗</button>
+        <button type="button" data-view="right">右侧窗</button>
+        <button type="button" data-view="rearLeft">左后部瞭望</button>
+        <button type="button" data-view="rearRight">右后部瞭望</button>
       </nav>
-      <div id="hint" class="hint" aria-live="polite">正在载入线路与驾驶台……</div>
-      <div class="dynamic-strip" aria-label="平稳性动态指标">
-        <div><span>速度</span><b id="metric-speed">0.0 km/h</b></div>
-        <div><span>列车管</span><b id="metric-pipe">500 kPa</b></div>
-        <div><span>制动缸</span><b id="metric-cylinder">240 kPa</b></div>
-        <div><span>缓解传播</span><b id="metric-release">0%</b></div>
-        <div><span>全列起动</span><b id="metric-start">0%</b></div>
-        <div><span>加速度</span><b id="metric-acceleration">0.00 m/s²</b></div>
-      </div>
-      <p class="operation-note">操作提示：直接点击三维出站信号机确认地面信号；点击驾驶台右上机车信号、左侧风压表及 LKJ 屏幕。拖动制动阀和牵引手柄，点击方向手柄切换位置。</p>
+
+      <div id="hint" class="hint" aria-live="polite">先选择教学或考评模式和训练场景，再按流程在驾驶台对应设备上操作。</div>
+
+      <section class="smooth-training" aria-label="平稳起动核心训练">
+        <div class="smooth-training-head"><div><strong>平稳起动核心训练</strong><span>全列起动后再加速</span></div><small>教学模式显示操纵要点，考评模式记录过程</small></div>
+        <div class="dynamic-strip" aria-label="平稳起动动态状态">
+          <div><span>速度</span><b id="metric-speed">0.0 km/h</b></div>
+          <div><span>牵引级位</span><b id="metric-traction">零位</b></div>
+          <div><span>已起动车辆</span><b id="metric-start">0/12辆</b></div>
+          <div><span>加速度</span><b id="metric-acceleration">平稳</b></div>
+          <div><span>纵向冲动</span><b id="metric-jerk">正常</b></div>
+          <div><span>LKJ对标距离</span><b id="metric-lkj">454 m</b></div>
+        </div>
+        <ol id="smooth-guide" class="smooth-guide"></ol>
+      </section>
     </section>
-    <aside class="side-column">
-      <section class="panel drawer" id="workflow-drawer">
-        <div class="panel-head"><h2>平稳起动作业流程</h2><button class="drawer-close" type="button" aria-label="关闭">×</button></div>
+
+    <aside class="side-column control-sidebar">
+      <section class="panel drawer control-drawer" id="workflow-drawer">
+        <div class="panel-head"><h2>完整发车与平稳起动流程</h2><button id="workflow-close" class="drawer-close" type="button" aria-label="关闭流程">×</button></div>
         <ol id="procedure"></ol>
       </section>
-      <section class="panel drawer" id="training-drawer">
-        <div class="panel-head"><h2>教学 / 考评</h2><button class="drawer-close" type="button" aria-label="关闭">×</button></div>
-        <div class="mode-buttons"><button type="button" data-mode="teaching" class="active">教学模式</button><button type="button" data-mode="assessment">考评模式</button></div>
-        <div id="status-grid" class="status-grid"></div>
-        <div class="score-box"><span>当前成绩</span><b id="score">0</b><small>分</small></div>
-        <button id="reset-training" type="button" class="secondary">重新开始</button>
-        <p class="panel-note">考评模式中一般操作错误只扣分，不阻断后续操作；停车信号等安全红线仍强制切除牵引并停车。</p>
+      <section class="panel drawer control-drawer" id="training-drawer">
+        <div class="panel-head"><h2>教学／考评与场景</h2><button id="training-close" class="drawer-close" type="button" aria-label="关闭教学考评与场景">×</button></div>
+        <div id="training-controls" class="training-controls"></div>
+      </section>
+      <section class="panel debug-panel">
+        <div class="panel-head"><h2>调试控制</h2></div>
+        <div id="keys" class="keys"></div><div id="status" class="status"></div>
       </section>
     </aside>
   </main>
-  <div class="drawer-backdrop" id="drawer-backdrop"></div>
-  <div class="device-modal" id="lkj-modal" aria-hidden="true">
-    <section class="device-shell" role="dialog" aria-modal="true" aria-labelledby="lkj-title">
-      <div class="device-head"><div><strong id="lkj-title">LKJ2000 运行监控装置</strong><span>参数已设定 · 监控主界面</span></div><button type="button" class="device-close" aria-label="关闭">×</button></div>
-      <div class="lkj-screen">
-        <div class="lkj-top"><span>速度 <b id="lkj-speed">0</b></span><span>限速 <b>80</b></span><span>距离 <b id="lkj-distance">454</b></span></div>
-        <div class="lkj-chart"><i class="lkj-curve"></i><span>运行监控曲线</span></div>
-        <div class="lkj-info">列车：K2026次　信号：<b class="green">绿灯</b><br>状态：<b id="lkj-state">停车监控</b></div>
-      </div>
-      <div class="lkj-keys"><button type="button" disabled>查询</button><button type="button" disabled>↑</button><button id="lkj-start" type="button" class="start-key">开车 / 7</button><button type="button" disabled>确认</button></div>
-      <p class="device-note">本训练只开放平稳起动所需的“开车”操作，参数输入与揭示核对已在任务初始状态完成。</p>
-    </section>
-  </div>
-  <div class="result-modal" id="result-modal" aria-hidden="true">
-    <section class="result-card" role="dialog" aria-modal="true"><h2>本次训练成绩</h2><div class="result-score"><b id="result-score">0</b><span>分</span></div><p id="result-summary"></p><div id="result-deductions"></div><button id="result-close" type="button">返回驾驶台</button></section>
-  </div>
-  <script type="module" src="./scripts/smooth-start-app.js?rev=1"></script>
+
+  <button id="workflow-scrim" class="drawer-backdrop workflow-scrim" type="button" aria-label="关闭侧栏"></button>
+  <script type="module" src="./scripts/archive-2d-cabview-real-route.js?rev=smooth-start-v12"></script>
 </body>
 </html>

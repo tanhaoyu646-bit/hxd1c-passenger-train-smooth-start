@@ -26,10 +26,10 @@ export const LKJ_TRAINING_PARAMETERS = {
   section: '101',
   station: '203',
   trainNo: '2026',
-  trainType: '2',
-  weight: '2800',
-  cars: '50',
-  length: '690',
+  trainType: '1',
+  weight: '850',
+  cars: '12',
+  length: '330',
 };
 
 export const LKJ_FIELD_DEFINITIONS = [
@@ -37,16 +37,16 @@ export const LKJ_FIELD_DEFINITIONS = [
   ['assistantId', '副司机号', '0002'],
   ['section', '区段号', '101'],
   ['station', '车站号', '203（株洲）'],
-  ['trainNo', '车次', '2026'],
-  ['trainType', '列车种类代码', '2＝货物列车'],
-  ['weight', '总重（t）', '2800'],
-  ['cars', '辆数', '50'],
-  ['length', '列车长度（m）', '690'],
+  ['trainNo', '车次', '2026（显示 K2026）'],
+  ['trainType', '列车种类代码', '1＝旅客列车（教学）'],
+  ['weight', '总重（t）', '850（教学值）'],
+  ['cars', '辆数', '12'],
+  ['length', '列车长度（m）', '330（教学值）'],
 ];
 
 export const RUNNING_NOTICES = [
   '株洲站 1 道出发，运行方向：七斗冲方向。',
-  '本次为 2026 次货物列车，机车型号 HXD1C。',
+  '本次为 K2026 次教学编组，采用 HXD1C 驾驶台功能载体。',
   '行车凭证按当前教学场景确认；揭示仅供课堂训练使用。',
 ];
 

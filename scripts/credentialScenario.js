@@ -37,9 +37,9 @@ export const SCENARIOS = {
     finalAudio: 'station-departure-notice.mp3',
     documentTitle: '绿色许可证',
     documentType: 'green-permit',
-    documentText: '在出站信号机故障的情况下，准许第2026次列车由株洲站1道向七斗冲方向发车。',
+    documentText: '在出站信号机故障的情况下，准许K2026次教学编组由株洲站1道向七斗冲方向发车。',
     documentFields: [
-      ['train', '车次', '2026次'],
+      ['train', '车次', 'K2026次'],
       ['track', '发车线路', '株洲站1道'],
       ['reason', '适用原因', '出站信号机故障'],
       ['number', '许可证编号', 'Z-2026-01'],
@@ -69,10 +69,10 @@ export const SCENARIOS = {
     orderNumber: '2026001',
     phoneRecordNumber: '018',
     ticketSerial: 'ZQ-2026-018',
-    orderText: '自接令时起，株洲站至七斗冲站间停止基本闭塞法，改按电话闭塞法行车。准许2026次列车凭第018号路票由株洲站1道向七斗冲方向发车。',
+    orderText: '自接令时起，株洲站至七斗冲站间停止基本闭塞法，改按电话闭塞法行车。准许K2026次教学编组凭第018号路票由株洲站1道向七斗冲方向发车。',
     documentText: '电话闭塞行车凭证：路票。请逐项核对后确认。',
     documentFields: [
-      ['train', '车次', '2026次'],
+      ['train', '车次', 'K2026次'],
       ['section', '区间', '株洲站至七斗冲站'],
       ['record', '电话记录号码', '018'],
       ['serial', '票面编号', 'ZQ-2026-018'],
@@ -98,7 +98,7 @@ export const ROUTE_CONTEXT = {
   station: '株洲站',
   track: '1道',
   direction: '七斗冲方向',
-  trainNo: '2026次',
+  trainNo: 'K2026次',
   locomotive: 'HXD1C',
   // 以驾驶台视点所在的实际控制路径投影为准，避免判定位置早于三维实体。
   departureSignalDistance: 454.14,

@@ -32,6 +32,7 @@ function authorize(sim, id) {
     assert.equal(sim.command('station-contact'), true);
     assert.equal(sim.command('signal-answer', 'green'), true);
     assert.equal(sim.command('direction-answer', 'qidouchong'), true);
+    assert.equal(sim.command('locomotive-signal-answer', 'green'), true);
   } else if (id === 'weather') {
     assert.equal(sim.command('order-sign'), true);
     assert.equal(sim.command('locomotive-signal-answer', 'green'), true);
@@ -47,6 +48,8 @@ function authorize(sim, id) {
     assert.equal(sim.command('lkj-special-unlock', true), true);
     assert.equal(sim.state.lkjUnlockLimit, id === 'greenPermit' ? 60 : 45);
     assert.equal(sim.command('departure-notice'), true);
+    assert.equal(sim.command('signal-answer', 'red'), true);
+    assert.equal(sim.command('locomotive-signal-answer', 'red'), true);
   }
   assert.equal(sim.command('hand-signal-confirm'), true);
   assert.equal(sim.command('headlight'), true);
@@ -60,8 +63,13 @@ function runScenario(id) {
   authorize(sim, id);
   let lkjStartPressed = false;
   let weatherSignalConfirmed = false;
+  let progressiveTractionApplied = false;
   for (let index = 0; index < 200000 && !sim.state.completed; index += 1) {
-    sim.tick(0.05);
+    sim.tick(0.05, 'rearLeft');
+    if (!progressiveTractionApplied && sim.state.wholeTrainStarted) {
+      assert.equal(sim.command('traction', 2), true);
+      progressiveTractionApplied = true;
+    }
     if (id === 'weather' && !weatherSignalConfirmed && sim.state.credentialStage === 'confirm-ground-signal') {
       assert.equal(sim.command('signal-answer', 'green'), true);
       weatherSignalConfirmed = true;
@@ -118,8 +126,8 @@ assert.equal(assessedWrong.command('lkj-special-input', { permitNumber: '000000'
 assert.equal(assessedWrong.command('lkj-special-unlock', false), true);
 assert.equal(assessedWrong.command('departure-notice'), true);
 assert.equal(assessedWrong.command('hand-signal-confirm'), true);
-assert.equal(procedureState(assessedWrong.state).complete[7], true, '考评模式错误操作应记录后继续流程');
-assert.equal(scoreRun(assessedWrong.state).itemScores[7].earned, 5, '第8项应仅保留发车通知和手信号的分值');
+assert.equal(procedureState(assessedWrong.state).complete[6], true, '考评模式错误操作应记录后继续流程');
+assert.equal(scoreRun(assessedWrong.state).itemScores[6].earned, 2, '凭证项应仅保留发车通知和手信号的分值');
 
 const assessmentSoftGate = new TrainSimulation();
 assert.equal(assessmentSoftGate.command('training-mode', 'assessment'), true);

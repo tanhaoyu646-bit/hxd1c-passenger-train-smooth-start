@@ -52,7 +52,13 @@ export class TrainSimulation {
       mainRes: 750, equalizingRes: 600, trainPipe: 600, tailPipe: 598, brakeCyl: 0,
       initialChecks: Object.fromEntries(Object.keys(INITIAL_CHECK_LABELS).map((key) => [key, false])),
       netVoltage: 0, speed: 0, distance: 0, tractionForce: 0, brakeForce: 0,
-      brakeTested: false, releaseObserved: false, lowNotchStartConfirmed: false, elapsed: 0,
+      brakeTested: false, releaseObserved: false, elapsed: 0,
+      consistCars: 12, releasePropagation: 0, actualTraction: 0, couplerForce: 0,
+      wholeTrainStartFraction: 0, wholeTrainStarted: false,
+      lowNotchApplied: false, lowNotchHeld: false, lowNotchStartConfirmed: false,
+      progressiveTraction: false, prematureAcceleration: false,
+      rearLookSeconds: 0, rearLookCompleted: false,
+      currentAcceleration: 0, currentJerk: 0, smoothSeconds: 0, smoothStartQualified: false,
       rejected: 0, abrupt: 0, maxAcceleration: 0, maxJerk: 0, lastAcceleration: 0,
       assessmentFirstTractionRecorded: false, assessmentScoreLocks: [], assessmentCredentialLocks: [], assessmentSequenceErrors: [],
     };
@@ -110,9 +116,10 @@ export class TrainSimulation {
       [3, s.panto && s.netVoltage >= 22.5 && s.mainBreaker && s.compressor && s.mainRes >= 750, '受电弓、主断、空压机或总风准备不完整即动车'],
       [4, s.brakeTested, '未完成简略制动机试验即动车'],
       [5, s.releaseObserved, '未确认制动缓解即动车'],
-      [6, !s.parkingBrake, '未缓解停放制动即动车'],
+      [7, (s.scenarioId === 'weather' ? s.locomotiveSignalObserved : s.signalObserved && s.locomotiveSignalObserved), '未按场景完成地面信号和机车信号确认即动车'],
       [8, s.headlight && s.horn, '未开启前照灯或未鸣笛即动车'],
       [9, s.direction === 'F', '换向手柄未置前进位即动车'],
+      [10, !s.parkingBrake && s.autoBrake === 0 && s.independentBrake === 0 && s.brakeCyl < TRACTION_BRAKE_CYL_MAX, '起动前制动状态未完全缓解'],
     ];
     for (const [index, correct, reason] of checks) if (!correct) this.lockAssessmentScore(index, reason);
     if (!s.credentialCorrect) this.lockAssessmentCredential('credential', `${scenario.label}行车凭证未正确确认即动车`);
@@ -199,6 +206,11 @@ export class TrainSimulation {
       s.lkjUnlockCombinationAttempted = false; s.lkjUnlockCombinationCorrect = false; s.lkjUnlockLimit = 0;
       s.lkjUnlockMethodErrorRecorded = false; s.lkjUnlockFieldsErrorRecorded = false; s.lkjUnlockCombinationErrorRecorded = false;
       s.signalMismatch = false; s.signalPassed = false; s.completed = false;
+      s.actualTraction = 0; s.couplerForce = 0; s.wholeTrainStartFraction = 0; s.wholeTrainStarted = false;
+      s.lowNotchApplied = false; s.lowNotchHeld = false; s.lowNotchStartConfirmed = false;
+      s.progressiveTraction = false; s.prematureAcceleration = false;
+      s.rearLookSeconds = 0; s.rearLookCompleted = false;
+      s.currentAcceleration = 0; s.currentJerk = 0; s.smoothSeconds = 0; s.smoothStartQualified = false;
       this.syncAuthority();
       this.emit(`已选择“${scenario.label}”场景：${scenario.description}`);
       return true;
@@ -528,7 +540,8 @@ export class TrainSimulation {
     if (id === 'traction') {
       // 原 HXD1C Combined_Control：前推为 7 个牵引位，中央为零位，后拉为 8 个电制动位。
       const next = clamp(Number(value), -8, 7);
-      if (next - s.traction > 1) s.abrupt += 1;
+      const previous = s.traction;
+      if (next - previous > 1) s.abrupt += 1;
       this.invalidateInitialCheck('traction');
       const blockers = next > 0 ? this.tractionInterlockReasons() : [];
       if (blockers.length) {
@@ -537,13 +550,23 @@ export class TrainSimulation {
         this.emit(`牵引未投入：${blockers.join('；')}。请确认后重新由零位推至低级位。`);
         return false;
       }
+      if (next > 2 && !s.wholeTrainStarted) {
+        s.prematureAcceleration = true;
+        if (!this.isAssessment()) {
+          s.traction = previous;
+          return this.reject('全列尚未起动，应保持1～2级低级位，确认全列移动后再逐级增加牵引。');
+        }
+        s.abrupt += 2;
+      }
       if (next > 0) this.recordAssessmentDepartureSnapshot();
       s.traction = next;
+      if (next >= 1 && next <= 2) s.lowNotchApplied = true;
+      if (s.wholeTrainStarted && next > previous && next - previous === 1) s.progressiveTraction = true;
       this.emit(next > 0 ? `牵引手柄置于 ${next} 级。` : next < 0 ? `电制动置于 ${Math.abs(next)} 级。` : '牵引手柄已回零。'); return true;
     }
     return false;
   }
-  tick(dt) {
+  tick(dt, view = 'front') {
     const s = this.state; s.elapsed += dt;
     const netTarget = s.panto ? 25 : 0; s.netVoltage += (netTarget - s.netVoltage) * Math.min(1, dt * 1.8);
     if (s.compressor && s.mainBreaker) {
@@ -567,23 +590,50 @@ export class TrainSimulation {
     const cylTarget = Math.max(autoCyl, individualCyl); s.brakeCyl += (cylTarget - s.brakeCyl) * Math.min(1, dt * 2.3);
     // “制动缓解完成”与牵引联锁使用同一压力阈值，避免流程已变绿但牵引仍被残压阻断。
     if (s.brakeTested && s.autoBrake === 0 && s.trainPipe > 570 && s.brakeCyl < TRACTION_BRAKE_CYL_MAX) s.releaseObserved = true;
+    const brakesReleased = s.autoBrake === 0 && s.independentBrake === 0 && s.brakeCyl < TRACTION_BRAKE_CYL_MAX;
+    s.releasePropagation += ((brakesReleased ? 1 : 0) - s.releasePropagation) * Math.min(1, dt * (brakesReleased ? .34 : 1.2));
+    s.actualTraction += ((s.traction > 0 ? s.traction : 0) - s.actualTraction) * Math.min(1, dt * .72);
     const tractionAllowed = this.tractionInterlockReasons().length === 0;
-    s.tractionForce = tractionAllowed && s.traction > 0 ? s.traction * 68000 * Math.max(.34, 1 - s.speed / 125) : 0;
+    s.tractionForce = tractionAllowed && s.actualTraction > 0 ? s.actualTraction * 68000 * Math.max(.34, 1 - s.speed / 125) : 0;
     const electricBrake = s.traction < 0 ? Math.abs(s.traction) * 43000 : 0;
     const parkingBrakeForce = s.parkingBrake ? 450000 : 0;
     s.brakeForce = s.brakeCyl * 1250 + electricBrake + parkingBrakeForce;
-    const mass = 2800000; const resistance = 24000 + 60 * s.speed + 2 * s.speed * s.speed;
+    const mass = 850000; const resistance = 13000 + 34 * s.speed + 1.2 * s.speed * s.speed;
     const acceleration = (s.tractionForce - s.brakeForce - resistance) / mass;
     const actual = s.speed <= 0 && acceleration < 0 ? 0 : acceleration;
     const activeLimit = s.lkjUnlockCorrect && s.lkjUnlockLimit > 0 ? s.lkjUnlockLimit : s.limitedStart ? 15 : 120;
     s.speed = clamp(s.speed + actual * dt * 3.6, 0, activeLimit); s.distance += s.speed / 3.6 * dt;
-    // 课堂中“低级位平稳起动”只需确认低级位下列车已经开始平稳滚动。
-    // 达到该状态后可按操纵需要逐级加力，不能把低级位误当作保持到 5 km/h 的限制。
-    if (!s.lowNotchStartConfirmed && s.traction >= 1 && s.traction <= 2 && s.speed >= 0.5) {
-      s.lowNotchStartConfirmed = true;
-      this.emit('列车已在低级位平稳起动；可根据速度变化逐级增大牵引。');
+    const pullBuilding = tractionAllowed && s.actualTraction > .05 && s.releasePropagation > .35;
+    if (pullBuilding) s.couplerForce = clamp(s.couplerForce + dt * (.18 + s.actualTraction * .04), 0, 1);
+    else s.couplerForce += (0 - s.couplerForce) * Math.min(1, dt * 1.8);
+    if (s.lowNotchApplied && s.traction <= 2 && s.couplerForce >= .38) s.lowNotchHeld = true;
+    const startTarget = s.speed > .03 || s.couplerForce > .12 ? s.couplerForce : 0;
+    s.wholeTrainStartFraction += (startTarget - s.wholeTrainStartFraction) * Math.min(1, dt * .58);
+    if (!s.wholeTrainStarted && s.wholeTrainStartFraction >= .96) {
+      s.wholeTrainStartFraction = 1;
+      s.wholeTrainStarted = true;
+      this.emit('全列12辆车辆已依次起动，可以在后部瞭望确认后逐级增加牵引。');
     }
-    s.maxAcceleration = Math.max(s.maxAcceleration, Math.abs(actual)); s.maxJerk = Math.max(s.maxJerk, Math.abs((actual - s.lastAcceleration) / Math.max(dt, .01))); s.lastAcceleration = actual;
+    if (!s.lowNotchStartConfirmed && s.lowNotchApplied && s.speed >= 0.5) {
+      s.lowNotchStartConfirmed = true;
+      this.emit('列车已在低级位起动；保持当前级位，等待全列车辆依次起动。');
+    }
+    s.currentAcceleration = actual;
+    s.currentJerk = (actual - s.lastAcceleration) / Math.max(dt, .01);
+    s.maxAcceleration = Math.max(s.maxAcceleration, Math.abs(actual)); s.maxJerk = Math.max(s.maxJerk, Math.abs(s.currentJerk)); s.lastAcceleration = actual;
+    const smoothNow = s.speed >= 5 && s.speed <= 15 && s.wholeTrainStarted && Math.abs(s.currentAcceleration) <= .42 && Math.abs(s.currentJerk) <= .48;
+    s.smoothSeconds = smoothNow ? s.smoothSeconds + dt : 0;
+    if (!s.smoothStartQualified && s.smoothSeconds >= 2) {
+      s.smoothStartQualified = true;
+      this.emit('平稳起动控制合格：速度、加速度和纵向冲动保持稳定。');
+    }
+    if ((view === 'rearLeft' || view === 'rearRight') && s.speed > .2) {
+      s.rearLookSeconds += dt;
+      if (!s.rearLookCompleted && s.wholeTrainStarted && s.rearLookSeconds >= 2.5) {
+        s.rearLookCompleted = true;
+        this.emit('后部瞭望完成：已确认全列车辆移动。');
+      }
+    }
     if (s.scenarioId === 'weather' && s.credentialStage === 'limited-start' && s.distance >= ROUTE_CONTEXT.departureSignalDistance - 50) {
       s.credentialStage = 'confirm-ground-signal';
       this.emit('已接近地面出站信号机：请点击信号机确认地面信号是否与机车信号一致。');
@@ -599,7 +649,8 @@ export class TrainSimulation {
       s.lkjStartDistance = s.distance;
       this.reject('已越过 LKJ 开车对标点，未按压【开车／7】键；本项错误已记录。');
     }
-    if (s.signalPassed && !s.completed && s.distance >= ROUTE_CONTEXT.trainingEndDistance && s.speed >= 5) {
+    const coreComplete = s.wholeTrainStarted && s.rearLookCompleted && s.smoothStartQualified && s.lkjStartCorrect;
+    if (s.signalPassed && !s.completed && s.distance >= ROUTE_CONTEXT.trainingEndDistance && s.speed >= 5 && (coreComplete || this.isAssessment())) {
       s.completed = true;
       this.emit('已越过出站信号机后稳定运行 300 m，本次训练结束。');
     }
