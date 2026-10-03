@@ -1,5 +1,5 @@
 import * as THREE from '../lib/three/three.module.js';
-import { ROUTE_CONTEXT } from './credentialScenario.js?rev=lkj-nonnormal-v2-20260928';
+import { ROUTE_CONTEXT } from './smoothStartConfig.js';
 
 // fetch() 的相对地址以页面而非当前模块为基准；GitHub Pages 位于仓库子目录，
 // 因此所有三维资源必须相对 import.meta.url 解析，不能使用普通 ../assets 字符串。
@@ -54,6 +54,7 @@ export class MstsRouteScene {
     this.signalLampVisibility = 1;
     this.departureSignal = null;
     this.neighborSignal = null;
+    this.passengerCars = [];
     this.signalRaycaster = new THREE.Raycaster();
     this.signalPointer = new THREE.Vector2();
     this.materialCache = new Map();
@@ -97,6 +98,7 @@ export class MstsRouteScene {
       ]);
       this.buildRoutePath(pathData);
       this.buildRoute(sceneData);
+      this.buildPassengerConsist(12);
       if (ROUTE_RENDER_OPTIONS.proceduralTrack) this.buildSelectedRouteTrack(NEXT_STATION_DISTANCE + 350);
       if (ROUTE_RENDER_OPTIONS.railHighlights) this.buildRailHighlights(NEXT_STATION_DISTANCE + 350);
       if (ROUTE_RENDER_OPTIONS.sourceDepartureSignal) this.buildSourceDepartureSignal(sceneData);
@@ -197,6 +199,73 @@ export class MstsRouteScene {
       }
     }
     this.pathLength = this.routeDistances[this.routeDistances.length - 1];
+  }
+
+  buildPassengerConsist(count = 12) {
+    const bodyMaterial = new THREE.MeshStandardMaterial({ color: '#d8dedf', roughness: 0.68, metalness: 0.26 });
+    const bandMaterial = new THREE.MeshStandardMaterial({ color: '#225e88', roughness: 0.72, metalness: 0.12 });
+    const windowMaterial = new THREE.MeshStandardMaterial({ color: '#172a38', roughness: 0.25, metalness: 0.15, emissive: '#102331', emissiveIntensity: 0.25 });
+    const roofMaterial = new THREE.MeshStandardMaterial({ color: '#8e999e', roughness: 0.82, metalness: 0.18 });
+    const underframeMaterial = new THREE.MeshStandardMaterial({ color: '#20282b', roughness: 0.88, metalness: 0.35 });
+    const bodyGeometry = new THREE.BoxGeometry(3.1, 3.55, 24.5);
+    const bandGeometry = new THREE.BoxGeometry(3.15, 0.48, 24.55);
+    const windowGeometry = new THREE.BoxGeometry(3.17, 0.72, 20.8);
+    const roofGeometry = new THREE.BoxGeometry(3.0, 0.28, 24.1);
+    const underframeGeometry = new THREE.BoxGeometry(2.7, 0.52, 22.5);
+    for (let index = 0; index < count; index += 1) {
+      const car = new THREE.Group();
+      car.name = `PASSENGER_CAR_${String(index + 1).padStart(2, '0')}`;
+      const body = new THREE.Mesh(bodyGeometry, bodyMaterial);
+      body.position.y = 2.45;
+      car.add(body);
+      const band = new THREE.Mesh(bandGeometry, bandMaterial);
+      band.position.y = 1.65;
+      car.add(band);
+      const windows = new THREE.Mesh(windowGeometry, windowMaterial);
+      windows.position.y = 2.85;
+      car.add(windows);
+      const roof = new THREE.Mesh(roofGeometry, roofMaterial);
+      roof.position.y = 4.34;
+      car.add(roof);
+      const underframe = new THREE.Mesh(underframeGeometry, underframeMaterial);
+      underframe.position.y = 0.55;
+      car.add(underframe);
+      car.userData.trainOffset = 25 + index * 25.8;
+      this.routeRoot.add(car);
+      this.passengerCars.push(car);
+    }
+    this.updatePassengerConsist();
+  }
+
+  getExtendedPathPosition(distance, target = new THREE.Vector3()) {
+    if (distance >= 0) return this.getPathPosition(distance, target);
+    if (this.routePoints.length < 2) return target.set(0, 0, -distance);
+    const origin = this.routePoints[0];
+    const tangent = new THREE.Vector3().subVectors(this.routePoints[1], origin).normalize();
+    return target.copy(origin).addScaledVector(tangent, distance);
+  }
+
+  getExtendedPathTangent(distance, target = new THREE.Vector3()) {
+    const before = this.getExtendedPathPosition(distance - 1.5, new THREE.Vector3());
+    const after = this.getExtendedPathPosition(distance + 1.5, new THREE.Vector3());
+    target.subVectors(after, before);
+    target.y = 0;
+    if (target.lengthSq() < 0.000001) target.set(0, 0, -1);
+    return target.normalize();
+  }
+
+  updatePassengerConsist() {
+    if (!this.passengerCars.length) return;
+    const routeDistance = this.startOffset + this.distance;
+    const point = new THREE.Vector3();
+    const tangent = new THREE.Vector3();
+    this.passengerCars.forEach((car) => {
+      const carDistance = routeDistance - car.userData.trainOffset;
+      this.getExtendedPathPosition(carDistance, point);
+      this.getExtendedPathTangent(carDistance, tangent);
+      car.position.copy(point);
+      car.rotation.set(0, Math.atan2(tangent.x, tangent.z), 0);
+    });
   }
 
   projectPointToPath(position) {
@@ -649,6 +718,7 @@ export class MstsRouteScene {
     this.view = view;
     this.canvas.classList.toggle('live', this.ready && (this.distance > 0.2 || view !== 'front' || signalVisible));
     this.updateAtmosphere();
+    this.updatePassengerConsist();
     this.applyCamera();
     this.updateSignalTeachingVisibility();
   }
@@ -662,12 +732,20 @@ export class MstsRouteScene {
     tangent.y = 0;
     if (tangent.lengthSq() > 0.000001) this.forward.copy(tangent.normalize());
     const baseYaw = Math.atan2(-this.forward.x, -this.forward.z);
-    const yawOffsets = { front: 0, left: THREE.MathUtils.degToRad(65), right: THREE.MathUtils.degToRad(-65) };
-    const pitchOffsets = { front: -0.22, left: -0.035, right: -0.035 };
-    const lateralOffsets = { front: 0, left: -0.7, right: 0.7 };
+    const yawOffsets = {
+      front: 0,
+      left: THREE.MathUtils.degToRad(65),
+      right: THREE.MathUtils.degToRad(-65),
+      rearLeft: THREE.MathUtils.degToRad(180),
+      rearRight: THREE.MathUtils.degToRad(-180),
+    };
+    const pitchOffsets = { front: -0.22, left: -0.035, right: -0.035, rearLeft: -0.04, rearRight: -0.04 };
+    const lateralOffsets = { front: 0, left: -0.7, right: 0.7, rearLeft: -5, rearRight: 5 };
+    const longitudinalOffsets = { front: 0, left: 0, right: 0, rearLeft: -3.2, rearRight: -3.2 };
     const right = new THREE.Vector3(this.forward.z, 0, -this.forward.x);
     this.camera.position.copy(position);
     this.camera.position.addScaledVector(right, lateralOffsets[this.view] || 0);
+    this.camera.position.addScaledVector(this.forward, longitudinalOffsets[this.view] || 0);
     this.camera.position.y += this.eyeHeight;
     if (this.ground) this.ground.position.set(position.x, position.y - 0.18, position.z);
     this.camera.rotation.order = 'YXZ';

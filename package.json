@@ -1,8 +1,8 @@
 {
-  "name": "hxd1c-running-credential-confirmation",
+  "name": "passenger-train-smooth-start",
   "private": true,
   "type": "module",
   "scripts": {
-    "check": "node --check scripts/dynamics.js && node --check scripts/procedure.js && node --check scripts/credentialScenario.js && node --check scripts/mstsRouteScene.js && node --check scripts/archive-2d-cabview-real-route.js && node --check tools/browser-smoke.mjs && node tools/validate-signal-assets.mjs && node tools/test-training-scenarios.mjs"
+    "check": "node --check scripts/smoothStartConfig.js && node --check scripts/smoothStartSimulation.js && node --check scripts/smoothStartProcedure.js && node --check scripts/mstsRouteScene.js && node --check scripts/smooth-start-app.js && node tools/test-smooth-start.mjs"
   }
 }
