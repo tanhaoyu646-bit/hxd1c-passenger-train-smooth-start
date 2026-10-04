@@ -177,7 +177,7 @@ const lkjKeyDefs=[
 ];
 const LKJ_NONNORMAL_OPTIONS=[
   ['groundSignal','地面信号确认'],['greenPermit','绿色许可证'],['routeTicket','路票'],
-  ['limit20','转入20km/h限速模式'],['otherSpecial','其他特殊行车'],['modeSelect','模式选择'],['return','返回'],
+  ['limit20','转入20km/h限速模式'],['otherSpecial','货车特殊前行'],['modeSelect','模式选择'],['return','返回'],
 ];
 let lkjDraft={};let lkjFieldIndex=0;let lkjPhase='boot';let lkjNotice='';let lkjNoticeIndex=0;
 let lkjUnlockDraft={};let lkjUnlockFieldIndex=0;let lkjMenuIndex=0;let lkjUpHoldTimer=null;let lkjUpHoldTriggered=false;let lkjUnlockArmedUntil=0;
@@ -199,7 +199,7 @@ function openLkjNonnormalMenu(){
   lkjMenuIndex=Math.max(0,LKJ_NONNORMAL_OPTIONS.findIndex(([key])=>key===scenario.lkjUnlockMethod));lkjPhase='nonnormal-menu';lkjNotice='';renderLkj();
 }
 function handleLkjKey(id){
-  playLkjKey();navigator.vibrate?.(12);
+  playLkjKey();navigator.vibrate?.(12);const scenario=getScenario(sim.state.scenarioId);
   if(lkjPhase==='nonnormal-menu'){
     if(id==='up'){lkjMenuIndex=(lkjMenuIndex-1+LKJ_NONNORMAL_OPTIONS.length)%LKJ_NONNORMAL_OPTIONS.length;renderLkj();return;}
     if(id==='down'){lkjMenuIndex=(lkjMenuIndex+1)%LKJ_NONNORMAL_OPTIONS.length;renderLkj();return;}
@@ -228,7 +228,7 @@ function handleLkjKey(id){
     if(id==='unlock'){lkjUnlockArmedUntil=performance.now()+2000;lkjNotice='解锁键已按下，请在2秒内按【确认】';renderLkj();return;}
     if(id==='right'){
       const combined=performance.now()<=lkjUnlockArmedUntil;const accepted=sim.command('lkj-special-unlock',combined);
-      if(accepted){lkjPhase='done';lkjUnlockArmedUntil=0;lkjNotice='';renderLkj();closeLkj();openCir();}else{lkjUnlockArmedUntil=0;renderLkj();}return;
+      if(accepted){lkjPhase='done';lkjUnlockArmedUntil=0;lkjNotice=`${scenario.lkjUnlockLabel}确认完成，模式限速 ${scenario.lkjUnlockLimit} km/h`;renderLkj();}else{lkjUnlockArmedUntil=0;renderLkj();}return;
     }
     if(id==='left'||id==='relief'){lkjPhase='nonnormal-input';renderLkj();return;}
     flashLkj('先按【解锁】，再在2秒内按【确认】。');return;
@@ -261,24 +261,40 @@ function lkjView(body,title='LKJ2000监控装置'){
   const scenario=getScenario(sim.state.scenarioId);const limit=sim.state.lkjUnlockCorrect&&sim.state.lkjUnlockLimit?sim.state.lkjUnlockLimit:scenario.requiresLkjUnlock?20:30;
   return `<div class="lkj-instrument-row"><i class="aspect ${sim.state.signalAspect}"></i><span><small>速度</small><b>${sim.state.speed.toFixed(0)}</b></span><span><small>限速</small><b>${limit}</b></span><span><small>距离</small><b>${Math.max(0,Math.round(ROUTE_CONTEXT.departureSignalDistance-sim.state.distance))}</b></span><span class="station"><small>信号／公里标</small><b>株洲　${sim.state.distance.toFixed(3)}</b></span><time>${new Date().toLocaleTimeString('zh-CN',{hour12:false})}</time></div><div class="lkj-titlebar">${title}</div><div class="lkj-screen-body">${body}</div><div class="lkj-soft-status"><span>纵断面</span><span>曲线</span><span>道岔</span></div>`;
 }
-function renderLkj(){
-  if(!lkjRoot)return;const screen=lkjRoot.querySelector('.lkj-screen');const scenario=getScenario(sim.state.scenarioId);
+function lkjMonitorView(overlay=''){
+  const scenario=getScenario(sim.state.scenarioId);
+  const limit=sim.state.lkjUnlockCorrect&&sim.state.lkjUnlockLimit?sim.state.lkjUnlockLimit:scenario.requiresLkjUnlock?20:80;
+  const remaining=Math.max(0,Math.round(ROUTE_CONTEXT.departureSignalDistance-sim.state.distance));
+  const position=Math.min(94,Math.max(5,sim.state.distance/Math.max(1,ROUTE_CONTEXT.departureSignalDistance)*74+8));
+  const curveY=Math.max(32,Math.min(112,128-limit*1.15));
+  const status=sim.state.lkjStartCorrect?'开车对标完成':sim.state.speed>=1?'运行监控':'停车监控';
+  const summary=sim.state.lkjUnlockCorrect?`<div class="lkj-confirm-summary"><b>行车命令：1</b><span>${scenario.lkjUnlockLabel}　${(scenario.lkjUnlockFields||[]).map(([key])=>sim.state.lkjUnlockData?.[key]||'').filter(Boolean).join(' / ')}</span><span>揭示解除：模式限速 ${limit} km/h</span></div>`:'';
+  return `<div class="lkj-instrument-row"><i class="aspect ${sim.state.signalAspect}"></i><span><small>速度</small><b>${sim.state.speed.toFixed(0)}</b></span><span><small>限速</small><b>${limit}</b></span><span><small>距离</small><b>${remaining}</b></span><span class="station"><small>信号／公里标</small><b>出站　${(611.864+sim.state.distance/1000).toFixed(3)}</b></span><time>${new Date().toLocaleTimeString('zh-CN',{hour12:false})}</time></div><div class="lkj-monitor-body"><div class="lkj-monitor-left"><div class="lkj-version">监控版本<br>ZS20261127<br>(20261004)<br>数据版本<br>ZS20261004</div><div class="lkj-scale"><span>120</span><span>100</span><span>80</span><span>60</span><span>40</span><span>20</span><span>0</span></div><svg class="lkj-curve" viewBox="0 0 600 150" preserveAspectRatio="none" aria-label="LKJ限速控制曲线"><line class="grid" x1="0" y1="30" x2="600" y2="30"/><line class="grid" x1="0" y1="60" x2="600" y2="60"/><line class="grid" x1="0" y1="90" x2="600" y2="90"/><line class="grid" x1="0" y1="120" x2="600" y2="120"/><polyline class="control" points="0,18 120,18 205,${curveY} 600,${curveY}"/><line class="position" x1="${position*6}" y1="0" x2="${position*6}" y2="150"/><text x="245" y="${Math.max(16,curveY-5)}">${limit}</text></svg>${summary}<div class="lkj-pressure"><b>原边电流　0</b><b>列车管压力　600</b><b>制动缸压力1　0</b><b>均衡风缸　600</b><b>制动缸压力2　0</b><b>工况　向前</b><b>过机矫正　0</b></div><div class="lkj-route-profile"><b>纵断面</b><svg viewBox="0 0 600 42" preserveAspectRatio="none"><polyline points="0,23 90,23 125,11 215,11 240,28 360,28 385,15 470,15 500,27 600,27"/><line x1="${position*6}" y1="0" x2="${position*6}" y2="42"/></svg><span>611.919</span><span>613.300</span><span>614.648</span><span>616.026</span></div><div class="lkj-track-band"><b>曲线</b><i></i><b>道岔</b><i></i></div>${lkjNotice?`<div class="lkj-device-toast">${lkjNotice}</div>`:''}</div><div class="lkj-side-status"><span>降级</span><span></span><span></span><span>开车</span><span></span><span>有权</span><span>客本</span><span class="yellow">A机</span><span></span></div><div class="lkj-monitor-state">${status}</div></div>${overlay}`;
+}
+function lkjNonnormalOverlay(){
   if(lkjPhase==='nonnormal-menu'){
-    screen.innerHTML=lkjView(`<p>请选择确认方式：</p><div class="lkj-menu">${LKJ_NONNORMAL_OPTIONS.map(([key,label],index)=>`<span class="${index===lkjMenuIndex?'selected':''}">${index===LKJ_NONNORMAL_OPTIONS.length-1?'0':index+1}. ${label}</span>`).join('')}</div><span class="lkj-help">【↑↓】选择　【确认】进入　【←】返回</span>`,'非正常行车确认');return;
+    return `<div class="lkj-popup lkj-nonnormal-menu"><header>非正常行车确认</header><p>请选择确认方式：</p><div>${LKJ_NONNORMAL_OPTIONS.map(([,label],index)=>`<span class="${index===lkjMenuIndex?'selected':''}">${index===LKJ_NONNORMAL_OPTIONS.length-1?'0':index+1}.　${label}</span>`).join('')}</div></div>`;
   }
+  const selectedScenario=sim.state.lkjUnlockMethod==='greenPermit'?SCENARIOS.greenPermit:sim.state.lkjUnlockMethod==='routeTicket'?SCENARIOS.routeTicket:getScenario(sim.state.scenarioId);
+  const fields=selectedScenario?.lkjUnlockFields||[];
   if(lkjPhase==='nonnormal-input'){
-    const selectedScenario=sim.state.lkjUnlockMethod==='greenPermit'?SCENARIOS.greenPermit:sim.state.lkjUnlockMethod==='routeTicket'?SCENARIOS.routeTicket:null;const fields=selectedScenario?.lkjUnlockFields||[];const [, ,target]=fields[lkjUnlockFieldIndex]||['','凭证号码',''];
-    screen.innerHTML=lkjView(`<p>所属车站：株洲站</p><div class="lkj-review">${fields.length?fields.map(([field,name],index)=>`<span class="${index===lkjUnlockFieldIndex?'selected':''}">${name}</span><strong class="${index===lkjUnlockFieldIndex?'selected':''}">${lkjUnlockDraft[field]||'_'}</strong>`).join(''):'<span>该方式无编号输入项</span><strong>—</strong>'}</div><span class="lkj-help">${sim.state.trainingMode==='teaching'&&target?`教学值：${target}<br>`:''}数字键输入　【←】删除　【↑↓】换项　【确认】提交</span>`,`${selectedScenario?.lkjUnlockLabel||'所选方式'}输入`);return;
+    const rows=fields.map(([field,label],index)=>`<label class="${index===lkjUnlockFieldIndex?'selected':''}"><span>${label}：</span><b>${lkjUnlockDraft[field]||'_'}</b></label>`).join('');
+    return `<div class="lkj-popup lkj-input-dialog ${sim.state.lkjUnlockMethod==='greenPermit'?'permit':''}"><header>${selectedScenario?.lkjUnlockLabel||'行车凭证'}输入</header><p>站　　名：　株洲站</p>${rows||'<p>该方式无编号输入项</p>'}<footer><span>取消</span><span>确认</span></footer></div>`;
   }
   if(lkjPhase==='nonnormal-arm'){
-    const limit=scenario.lkjUnlockLimit||0;const armed=performance.now()<=lkjUnlockArmedUntil;
-    screen.innerHTML=lkjView(`<p>${(scenario.lkjUnlockFields||[]).map(([key,label])=>`${label} ${lkjUnlockDraft[key]||'—'}`).join('　')}</p><strong class="${armed?'lkj-ok':'lkj-start-ready'}">${armed?'解锁键已按下':'等待组合解锁'}</strong><span class="lkj-help">正确后模式限速 ${limit} km/h<br>${armed?'请立即按【确认】':'先按【解锁】，再在2秒内按【确认】'}${lkjNotice?`<br>${lkjNotice}`:''}</span>`,`${scenario.lkjUnlockLabel}确认`);return;
+    const armed=performance.now()<=lkjUnlockArmedUntil;
+    return `<div class="lkj-confirm-prompt"><span>行车凭证确认方式：</span><b>[解锁]＋[确认]</b>${armed?'<em>解锁键已按下，请按确认</em>':''}</div>`;
   }
+  return '';
+}
+function renderLkj(){
+  if(!lkjRoot)return;const screen=lkjRoot.querySelector('.lkj-screen');const scenario=getScenario(sim.state.scenarioId);
+  if(['nonnormal-menu','nonnormal-input','nonnormal-arm'].includes(lkjPhase)){screen.innerHTML=lkjMonitorView(lkjNonnormalOverlay());return;}
   if(lkjOperational()&&lkjPhase!=='review'){
     const start=sim.state.lkjStartCorrect;const error=sim.state.lkjStartError;const remaining=Math.round(ROUTE_CONTEXT.departureSignalDistance-sim.state.distance);
     const status=start?'LKJ 正常监控':error==='missed'||error==='late'?'开车对标错误已记录':'开车对标待执行';
     const detail=start?'已在规定对标点按压【开车／7】键。':error==='stationary'?'列车尚未起动，不能开车对标。':error==='early'?`距开车对标点约 ${Math.max(0,remaining)} m。`:error==='late'||error==='missed'?'已越过对标点，本项按错误记录。':'列车起动后，在出站信号机对标点按压【开车／7】键。';
-    screen.innerHTML=lkjView(`<div class="lkj-monitor-graph"><svg viewBox="0 0 500 150" preserveAspectRatio="none"><polyline points="0,20 110,20 210,105 500,105"/><line x1="0" y1="132" x2="500" y2="132"/><line x1="${Math.min(490,Math.max(4,sim.state.distance/ROUTE_CONTEXT.departureSignalDistance*390))}" y1="0" x2="${Math.min(490,Math.max(4,sim.state.distance/ROUTE_CONTEXT.departureSignalDistance*390))}" y2="145"/></svg></div><strong class="${start?'lkj-ok':error?'lkj-start-error':'lkj-start-ready'}">${status}</strong><span class="lkj-help">${detail}<br>长按【↑】2秒进入非正常行车确认；按【查询】查看参数${lkjNotice?`<br>${lkjNotice}`:''}</span>`,'监控主界面');return;
+    screen.innerHTML=lkjMonitorView();screen.dataset.monitorStatus=status;screen.dataset.monitorDetail=detail;return;
   }
   if(lkjPhase==='done'&&sim.state.lkjAttempted){screen.innerHTML=lkjView(`<p>本次输入存在 ${sim.state.lkjErrors.length} 项不一致</p><strong>考评已记录，允许继续后续作业</strong><span class="lkj-help">本项将在成绩单中按实际正确性计分；按【查询】可重新输入。</span>`,'参数核对记录');return;}
   if(lkjPhase==='boot'){screen.innerHTML=lkjView('<p>设备自检正常</p><strong>按【查询】进入参数设定</strong><span class="lkj-help">使用显示器下方实体键操作</span>','LKJ2000');return;}
