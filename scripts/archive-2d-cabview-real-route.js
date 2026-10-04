@@ -1,8 +1,8 @@
-import { TrainSimulation } from './dynamics.js?rev=lkj-cir-gauge-alignment-v1-20260928';
-import { PROCEDURE, procedureState, scoreRun } from './procedure.js?rev=lkj-cir-gauge-alignment-v1-20260928';
-import { MstsRouteScene } from './mstsRouteScene.js?rev=lkj-cir-gauge-alignment-v1-20260928';
-import { LKJ_FIELD_DEFINITIONS, RUNNING_NOTICES, SIGNAL_ASPECTS } from './scenario.js?rev=lkj-cir-gauge-alignment-v1-20260928';
-import { SCENARIOS, ROUTE_CONTEXT, getScenario, scenarioAudioPath } from './credentialScenario.js?rev=lkj-cir-gauge-alignment-v1-20260928';
+import { TrainSimulation } from './dynamics.js?rev=smooth-start-v14-lkj-integration';
+import { PROCEDURE, procedureState, scoreRun } from './procedure.js?rev=smooth-start-v14-lkj-integration';
+import { MstsRouteScene } from './mstsRouteScene.js?rev=smooth-start-v14-lkj-integration';
+import { LKJ_FIELD_DEFINITIONS, RUNNING_NOTICES, SIGNAL_ASPECTS, TRAIN_DYNAMICS } from './scenario.js?rev=smooth-start-v14-lkj-integration';
+import { SCENARIOS, ROUTE_CONTEXT, getScenario, scenarioAudioPath } from './credentialScenario.js?rev=smooth-start-v14-lkj-integration';
 
 const $ = (q) => document.querySelector(q);
 const sim = new TrainSimulation();
@@ -173,13 +173,18 @@ const lkjKeyDefs=[
   ['digit-1','向前／1',238,510,51,40],['digit-6','向后／6',238,550,51,40],['digit-2','调车／2',290,510,51,40],['digit-7','开车／7',290,550,51,40],
   ['digit-3','车位／3',343,510,51,40],['digit-8','自动校正／8',343,550,51,40],['digit-4','进路号／4',395,510,51,40],['digit-9','出入库／9',395,550,51,40],
   ['digit-5','定标／5',447,510,51,40],['digit-0','巡检／0',447,550,51,40],['query','查询',499,510,53,40],['left','左箭头／删除',499,550,53,40],
-  ['up','上箭头',553,510,51,40],['down','下箭头',553,550,51,40],['dump','转储',604,510,50,40],['right','右箭头／确认',604,550,50,40],
+  ['up','上箭头',553,510,51,40],['down','下箭头',553,550,51,40],['dump','转储',604,510,50,40],['right','右箭头',604,550,50,40],
+  ['setting','设定',656,510,50,40],['confirm','确认',656,550,50,40],
+];
+const LKJ_QUERY_OPTIONS=[
+  ['parameters','参数显示'],['current-reveal','当前揭示查询'],['all-reveal','全部揭示查询'],['nonnormal-record','非正常行车记录'],['return','返回监控'],
 ];
 const LKJ_NONNORMAL_OPTIONS=[
   ['groundSignal','地面信号确认'],['greenPermit','绿色许可证'],['routeTicket','路票'],
   ['limit20','转入20km/h限速模式'],['otherSpecial','货车特殊前行'],['modeSelect','模式选择'],['return','返回'],
 ];
 let lkjDraft={};let lkjFieldIndex=0;let lkjPhase='boot';let lkjNotice='';let lkjNoticeIndex=0;
+let lkjQueryIndex=0;let lkjQueryScope='all';let lkjReviewOrigin='edit';
 let lkjUnlockDraft={};let lkjUnlockFieldIndex=0;let lkjMenuIndex=0;let lkjUpHoldTimer=null;let lkjUpHoldTriggered=false;let lkjUnlockArmedUntil=0;
 function lkjOperational(){return sim.state.lkjConfirmed||(sim.state.trainingMode==='assessment'&&sim.state.lkjAttempted);}
 function buildLkj(){
@@ -187,7 +192,7 @@ function buildLkj(){
   root.innerHTML=`<div class="device-shell lkj-shell" role="dialog" aria-modal="true" aria-label="LKJ2000监控装置"><div class="device-head"><div><strong>LKJ2000 监控装置</strong><span>输入参数并核对运行揭示</span></div><button type="button" class="device-close" aria-label="关闭">×</button></div><div class="lkj-device"><img src="./assets/lkj/LKJ2000.png" alt="LKJ2000设备面板"><div class="lkj-screen"></div><div class="lkj-keypad"></div></div></div>`;
   root.querySelector('.device-close').addEventListener('click',closeLkj);root.addEventListener('click',(event)=>{if(event.target===root)closeLkj();});
   const keypad=root.querySelector('.lkj-keypad');
-  for(const [id,label,x,y,w,h] of lkjKeyDefs){const button=document.createElement('button');button.type='button';button.dataset.lkjKey=id;button.setAttribute('aria-label',label);button.style.left=pct(x,800);button.style.top=pct(y,600);button.style.width=pct(w,800);button.style.height=pct(h,600);const release=()=>{button.classList.remove('pressed');if(id==='up'){clearTimeout(lkjUpHoldTimer);lkjUpHoldTimer=null;}};button.addEventListener('pointerdown',()=>{button.classList.add('pressed');if(id==='up'&&lkjOperational()&&lkjPhase==='done'){clearTimeout(lkjUpHoldTimer);lkjUpHoldTriggered=false;lkjUpHoldTimer=setTimeout(()=>{lkjUpHoldTriggered=true;openLkjNonnormalMenu();},2000);}});button.addEventListener('pointerup',release);button.addEventListener('pointercancel',release);button.addEventListener('pointerleave',release);button.addEventListener('click',()=>{if(id==='up'&&lkjUpHoldTriggered){lkjUpHoldTriggered=false;return;}handleLkjKey(id);});keypad.append(button);}
+  for(const [id,label,x,y,w,h] of lkjKeyDefs){const button=document.createElement('button');button.type='button';button.dataset.lkjKey=id;button.setAttribute('aria-label',label);button.style.left=pct(x,800);button.style.top=pct(y,600);button.style.width=pct(w,800);button.style.height=pct(h,600);if(id==='setting'||id==='confirm'){button.classList.add('lkj-added-key');button.textContent=label;}const release=()=>{button.classList.remove('pressed');if(id==='up'){clearTimeout(lkjUpHoldTimer);lkjUpHoldTimer=null;}};button.addEventListener('pointerdown',()=>{button.classList.add('pressed');if(id==='up'&&lkjOperational()&&lkjPhase==='done'){clearTimeout(lkjUpHoldTimer);lkjUpHoldTriggered=false;lkjUpHoldTimer=setTimeout(()=>{lkjUpHoldTriggered=true;openLkjNonnormalMenu();},2000);}});button.addEventListener('pointerup',release);button.addEventListener('pointercancel',release);button.addEventListener('pointerleave',release);button.addEventListener('click',()=>{if(id==='up'&&lkjUpHoldTriggered){lkjUpHoldTriggered=false;return;}handleLkjKey(id);});keypad.append(button);}
   document.body.append(root);lkjRoot=root;renderLkj();
 }
 function playLkjKey(){try{lkjKeyAudio.currentTime=0;lkjKeyAudio.play().catch(()=>{});}catch{}}
@@ -204,7 +209,7 @@ function handleLkjKey(id){
     if(id==='up'){lkjMenuIndex=(lkjMenuIndex-1+LKJ_NONNORMAL_OPTIONS.length)%LKJ_NONNORMAL_OPTIONS.length;renderLkj();return;}
     if(id==='down'){lkjMenuIndex=(lkjMenuIndex+1)%LKJ_NONNORMAL_OPTIONS.length;renderLkj();return;}
     if(id==='left'||id==='relief'){lkjPhase='done';renderLkj();return;}
-    if(id==='right'){
+    if(id==='confirm'){
       const [method]=LKJ_NONNORMAL_OPTIONS[lkjMenuIndex];if(method==='return'){lkjPhase='done';renderLkj();return;}
       const accepted=sim.command('lkj-special-method',method);if(!accepted){renderLkj();return;}
       const scenario=getScenario(sim.state.scenarioId);lkjUnlockDraft={...(sim.state.lkjUnlockData||{})};lkjUnlockFieldIndex=0;lkjPhase='nonnormal-input';lkjNotice='';renderLkj();return;
@@ -218,7 +223,7 @@ function handleLkjKey(id){
     if(id==='up'){lkjUnlockFieldIndex=Math.max(0,lkjUnlockFieldIndex-1);renderLkj();return;}
     if(id==='down'){lkjUnlockFieldIndex=Math.min(fields.length-1,lkjUnlockFieldIndex+1);renderLkj();return;}
     if(id==='relief'){lkjPhase='nonnormal-menu';renderLkj();return;}
-    if(id==='right'){
+    if(id==='confirm'){
       if(fields.some(([field])=>!String(lkjUnlockDraft[field]||'').trim())){flashLkj('调度命令号和凭证号码必须填写完整。');return;}
       const accepted=sim.command('lkj-special-input',lkjUnlockDraft);if(accepted){lkjPhase='nonnormal-arm';lkjUnlockArmedUntil=0;}renderLkj();return;
     }
@@ -226,7 +231,7 @@ function handleLkjKey(id){
   }
   if(lkjPhase==='nonnormal-arm'){
     if(id==='unlock'){lkjUnlockArmedUntil=performance.now()+2000;lkjNotice='解锁键已按下，请在2秒内按【确认】';renderLkj();return;}
-    if(id==='right'){
+    if(id==='confirm'){
       const combined=performance.now()<=lkjUnlockArmedUntil;const accepted=sim.command('lkj-special-unlock',combined);
       if(accepted){lkjPhase='done';lkjUnlockArmedUntil=0;lkjNotice=`${scenario.lkjUnlockLabel}确认完成，模式限速 ${scenario.lkjUnlockLimit} km/h`;renderLkj();}else{lkjUnlockArmedUntil=0;renderLkj();}return;
     }
@@ -234,8 +239,33 @@ function handleLkjKey(id){
     flashLkj('先按【解锁】，再在2秒内按【确认】。');return;
   }
   if(lkjOperational()&&id==='digit-7'){sim.command('lkj-start');renderLkj();return;}
-  if(lkjOperational()){if(id==='query')lkjPhase='review';else if(lkjPhase==='review'&&(id==='left'||id==='relief'||id==='right'||id==='query'))lkjPhase='done';renderLkj();return;}
-  if(lkjPhase==='boot'){if(id==='query'||id==='right'){lkjPhase='edit';lkjFieldIndex=0;renderLkj();}else flashLkj('请按【查询】进入参数设定');return;}
+  if(lkjPhase==='query-menu'){
+    if(id==='up'){lkjQueryIndex=(lkjQueryIndex-1+LKJ_QUERY_OPTIONS.length)%LKJ_QUERY_OPTIONS.length;renderLkj();return;}
+    if(id==='down'){lkjQueryIndex=(lkjQueryIndex+1)%LKJ_QUERY_OPTIONS.length;renderLkj();return;}
+    if(id==='left'||id==='relief'){lkjPhase=lkjOperational()?'done':'boot';renderLkj();return;}
+    if(id==='confirm'){
+      const [choice]=LKJ_QUERY_OPTIONS[lkjQueryIndex];
+      if(choice==='return'){lkjPhase=lkjOperational()?'done':'boot';renderLkj();return;}
+      if(choice==='parameters'){lkjReviewOrigin='query';lkjPhase='review';renderLkj();return;}
+      if(choice==='current-reveal'||choice==='all-reveal'){lkjQueryScope=choice==='current-reveal'?'current':'all';lkjReviewOrigin='query';lkjNoticeIndex=0;lkjPhase='reveal';renderLkj();return;}
+      if(choice==='nonnormal-record'){lkjPhase='query-record';renderLkj();return;}
+    }
+    flashLkj('使用【↑↓】选择，按【确认】进入。');return;
+  }
+  if(lkjPhase==='query-record'){
+    if(id==='left'||id==='relief'||id==='confirm'||id==='query'){lkjPhase='query-menu';renderLkj();return;}
+    flashLkj('按【确认】返回查询选择。');return;
+  }
+  if(lkjOperational()&&lkjPhase==='done'){
+    if(id==='query'){lkjQueryIndex=0;lkjPhase='query-menu';renderLkj();return;}
+    if(id==='setting'){lkjDraft={...(sim.state.lkjData||{})};lkjFieldIndex=0;lkjReviewOrigin='edit';lkjPhase='edit';renderLkj();return;}
+    flashLkj('监控状态：按【查询】查看信息，按【设定】修改参数。');return;
+  }
+  if(lkjPhase==='boot'){
+    if(id==='setting'){lkjPhase='edit';lkjFieldIndex=0;lkjReviewOrigin='edit';renderLkj();return;}
+    if(id==='query'){lkjQueryIndex=0;lkjPhase='query-menu';renderLkj();return;}
+    flashLkj('按【设定】进入参数设定，按【查询】查看查询选择');return;
+  }
   if(lkjPhase==='edit'){
     const [key]=lkjFields[lkjFieldIndex];const value=lkjDraft[key]||'';const digit=id.startsWith('digit-')?id.slice(6):'';
     if(digit){if(value.length<10)lkjDraft[key]=value+digit;renderLkj();return;}
@@ -243,22 +273,31 @@ function handleLkjKey(id){
     if(id==='unlock'){lkjDraft[key]='';renderLkj();return;}
     if(id==='up'||id==='relief'){lkjFieldIndex=Math.max(0,lkjFieldIndex-1);renderLkj();return;}
     if(id==='down'){lkjFieldIndex=Math.min(lkjFields.length-1,lkjFieldIndex+1);renderLkj();return;}
-    if(id==='query'){if(lkjFields.some(([field])=>!lkjDraft[field]))flashLkj('参数尚未填写完整');else{lkjPhase='review';renderLkj();}return;}
-    if(id==='right'){if(!value){flashLkj('本项不能为空');return;}if(lkjFieldIndex<lkjFields.length-1)lkjFieldIndex+=1;else lkjPhase='review';renderLkj();return;}
+    if(id==='right'){if(lkjFieldIndex<lkjFields.length-1)lkjFieldIndex+=1;renderLkj();return;}
+    if(id==='confirm'){if(!value){flashLkj('本项不能为空');return;}if(lkjFieldIndex<lkjFields.length-1)lkjFieldIndex+=1;else{lkjReviewOrigin='edit';lkjPhase='review';}renderLkj();return;}
+    if(id==='query'){lkjQueryIndex=0;lkjPhase='query-menu';renderLkj();return;}
     flashLkj('当前为参数输入状态');return;
   }
-  if(lkjPhase==='review'){if(id==='left'||id==='up'||id==='relief'){lkjPhase='edit';renderLkj();return;}if(id==='right'||id==='query'){lkjPhase='reveal';lkjNoticeIndex=0;renderLkj();return;}flashLkj('按【→】进入揭示核对');return;}
+  if(lkjPhase==='review'){
+    if(lkjReviewOrigin==='query'){if(id==='left'||id==='relief'||id==='confirm'||id==='query'){lkjPhase='query-menu';renderLkj();return;}flashLkj('参数为查询只读状态，按【确认】返回。');return;}
+    if(id==='left'||id==='up'||id==='relief'){lkjPhase='edit';renderLkj();return;}
+    if(id==='confirm'){if(lkjFields.some(([field])=>!lkjDraft[field])){flashLkj('参数尚未填写完整');return;}lkjQueryScope='all';lkjNoticeIndex=0;lkjPhase='reveal';renderLkj();return;}
+    flashLkj('按【确认】保存参数并进入揭示核对');return;
+  }
   if(lkjPhase==='reveal'){
-    if(id==='left'||id==='relief'){lkjPhase='review';renderLkj();return;}
-    if(id==='right'||id==='query'){
+    if(id==='left'||id==='relief'){lkjPhase=lkjReviewOrigin==='query'?'query-menu':'review';renderLkj();return;}
+    if(id==='up'){lkjNoticeIndex=Math.max(0,lkjNoticeIndex-1);renderLkj();return;}
+    if(id==='down'||id==='right'){lkjNoticeIndex=Math.min(RUNNING_NOTICES.length-1,lkjNoticeIndex+1);renderLkj();return;}
+    if(id==='confirm'){
       if(lkjNoticeIndex<RUNNING_NOTICES.length-1){lkjNoticeIndex+=1;renderLkj();return;}
+      if(lkjReviewOrigin==='query'){lkjPhase='query-menu';renderLkj();return;}
       if(command('lkj-confirm',lkjDraft)){lkjPhase='done';renderLkj();}return;
     }
-    flashLkj('按【→】逐条核对运行揭示');
+    flashLkj('按【↑↓】逐条查看，按【确认】完成核对');
   }
 }
 function lkjView(body,title='LKJ2000监控装置'){
-  const scenario=getScenario(sim.state.scenarioId);const limit=sim.state.lkjUnlockCorrect&&sim.state.lkjUnlockLimit?sim.state.lkjUnlockLimit:scenario.requiresLkjUnlock?20:30;
+  const scenario=getScenario(sim.state.scenarioId);const limit=sim.state.lkjUnlockCorrect&&sim.state.lkjUnlockLimit?sim.state.lkjUnlockLimit:scenario.requiresLkjUnlock?20:80;
   return `<div class="lkj-instrument-row"><i class="aspect ${sim.state.signalAspect}"></i><span><small>速度</small><b>${sim.state.speed.toFixed(0)}</b></span><span><small>限速</small><b>${limit}</b></span><span><small>距离</small><b>${Math.max(0,Math.round(ROUTE_CONTEXT.departureSignalDistance-sim.state.distance))}</b></span><span class="station"><small>信号／公里标</small><b>株洲　${sim.state.distance.toFixed(3)}</b></span><time>${new Date().toLocaleTimeString('zh-CN',{hour12:false})}</time></div><div class="lkj-titlebar">${title}</div><div class="lkj-screen-body">${body}</div><div class="lkj-soft-status"><span>纵断面</span><span>曲线</span><span>道岔</span></div>`;
 }
 function lkjMonitorView(overlay=''){
@@ -269,7 +308,7 @@ function lkjMonitorView(overlay=''){
   const curveY=Math.max(32,Math.min(112,128-limit*1.15));
   const status=sim.state.lkjStartCorrect?'开车对标完成':sim.state.speed>=1?'运行监控':'停车监控';
   const summary=sim.state.lkjUnlockCorrect?`<div class="lkj-confirm-summary"><b>行车命令：1</b><span>${scenario.lkjUnlockLabel}　${(scenario.lkjUnlockFields||[]).map(([key])=>sim.state.lkjUnlockData?.[key]||'').filter(Boolean).join(' / ')}</span><span>揭示解除：模式限速 ${limit} km/h</span></div>`:'';
-  return `<div class="lkj-instrument-row"><i class="aspect ${sim.state.signalAspect}"></i><span><small>速度</small><b>${sim.state.speed.toFixed(0)}</b></span><span><small>限速</small><b>${limit}</b></span><span><small>距离</small><b>${remaining}</b></span><span class="station"><small>信号／公里标</small><b>出站　${(611.864+sim.state.distance/1000).toFixed(3)}</b></span><time>${new Date().toLocaleTimeString('zh-CN',{hour12:false})}</time></div><div class="lkj-monitor-body"><div class="lkj-monitor-left"><div class="lkj-version">监控版本<br>ZS20261127<br>(20261004)<br>数据版本<br>ZS20261004</div><div class="lkj-scale"><span>120</span><span>100</span><span>80</span><span>60</span><span>40</span><span>20</span><span>0</span></div><svg class="lkj-curve" viewBox="0 0 600 150" preserveAspectRatio="none" aria-label="LKJ限速控制曲线"><line class="grid" x1="0" y1="30" x2="600" y2="30"/><line class="grid" x1="0" y1="60" x2="600" y2="60"/><line class="grid" x1="0" y1="90" x2="600" y2="90"/><line class="grid" x1="0" y1="120" x2="600" y2="120"/><polyline class="control" points="0,18 120,18 205,${curveY} 600,${curveY}"/><line class="position" x1="${position*6}" y1="0" x2="${position*6}" y2="150"/><text x="245" y="${Math.max(16,curveY-5)}">${limit}</text></svg>${summary}<div class="lkj-pressure"><b>原边电流　0</b><b>列车管压力　600</b><b>制动缸压力1　0</b><b>均衡风缸　600</b><b>制动缸压力2　0</b><b>工况　向前</b><b>过机矫正　0</b></div><div class="lkj-route-profile"><b>纵断面</b><svg viewBox="0 0 600 42" preserveAspectRatio="none"><polyline points="0,23 90,23 125,11 215,11 240,28 360,28 385,15 470,15 500,27 600,27"/><line x1="${position*6}" y1="0" x2="${position*6}" y2="42"/></svg><span>611.919</span><span>613.300</span><span>614.648</span><span>616.026</span></div><div class="lkj-track-band"><b>曲线</b><i></i><b>道岔</b><i></i></div>${lkjNotice?`<div class="lkj-device-toast">${lkjNotice}</div>`:''}</div><div class="lkj-side-status"><span>降级</span><span></span><span></span><span>开车</span><span></span><span>有权</span><span>客本</span><span class="yellow">A机</span><span></span></div><div class="lkj-monitor-state">${status}</div></div>${overlay}`;
+  return `<div class="lkj-instrument-row"><i class="aspect ${sim.state.signalAspect}"></i><span><small>速度</small><b>${sim.state.speed.toFixed(0)}</b></span><span><small>限速</small><b>${limit}</b></span><span><small>距离</small><b>${remaining}</b></span><span class="station"><small>信号／公里标</small><b>出站　${(611.864+sim.state.distance/1000).toFixed(3)}</b></span><time>${new Date().toLocaleTimeString('zh-CN',{hour12:false})}</time></div><div class="lkj-monitor-body"><div class="lkj-monitor-left"><div class="lkj-version">监控版本<br>ZS20261127<br>(20261004)<br>数据版本<br>ZS20261004</div><div class="lkj-scale"><span>120</span><span>100</span><span>80</span><span>60</span><span>40</span><span>20</span><span>0</span></div><svg class="lkj-curve" viewBox="0 0 600 150" preserveAspectRatio="none" aria-label="LKJ限速控制曲线"><line class="grid" x1="0" y1="30" x2="600" y2="30"/><line class="grid" x1="0" y1="60" x2="600" y2="60"/><line class="grid" x1="0" y1="90" x2="600" y2="90"/><line class="grid" x1="0" y1="120" x2="600" y2="120"/><polyline class="control" points="0,18 120,18 205,${curveY} 600,${curveY}"/><line class="position" x1="${position*6}" y1="0" x2="${position*6}" y2="150"/><text x="245" y="${Math.max(16,curveY-5)}">${limit}</text></svg>${summary}<div class="lkj-pressure"><b>原边电流　${Math.round(Math.max(0,sim.state.traction)*105)}</b><b>列车管压力　${Math.round(sim.state.trainPipe)}</b><b>制动缸压力1　${Math.round(sim.state.brakeCyl)}</b><b>均衡风缸　${Math.round(sim.state.equalizingRes)}</b><b>制动缸压力2　${Math.round(sim.state.brakeCyl)}</b><b>工况　${sim.state.direction==='F'?'向前':sim.state.direction==='R'?'向后':'零位'}</b><b>过机矫正　0</b></div><div class="lkj-route-profile"><b>纵断面</b><svg viewBox="0 0 600 42" preserveAspectRatio="none"><polyline points="0,23 90,23 125,11 215,11 240,28 360,28 385,15 470,15 500,27 600,27"/><line x1="${position*6}" y1="0" x2="${position*6}" y2="42"/></svg><span>611.919</span><span>613.300</span><span>614.648</span><span>616.026</span></div><div class="lkj-track-band"><b>曲线</b><i></i><b>道岔</b><i></i></div>${lkjNotice?`<div class="lkj-device-toast">${lkjNotice}</div>`:''}</div><div class="lkj-side-status"><span>降级</span><span></span><span></span><span>开车</span><span></span><span>有权</span><span>客本</span><span class="yellow">A机</span><span></span></div><div class="lkj-monitor-state">${status}</div></div>${overlay}`;
 }
 function lkjNonnormalOverlay(){
   if(lkjPhase==='nonnormal-menu'){
@@ -290,22 +329,27 @@ function lkjNonnormalOverlay(){
 function renderLkj(){
   if(!lkjRoot)return;const screen=lkjRoot.querySelector('.lkj-screen');const scenario=getScenario(sim.state.scenarioId);
   if(['nonnormal-menu','nonnormal-input','nonnormal-arm'].includes(lkjPhase)){screen.innerHTML=lkjMonitorView(lkjNonnormalOverlay());return;}
-  if(lkjOperational()&&lkjPhase!=='review'){
+  if(lkjPhase==='query-menu'){screen.innerHTML=lkjView(`<div class="lkj-menu">${LKJ_QUERY_OPTIONS.map(([,label],index)=>`<span class="${index===lkjQueryIndex?'selected':''}">${index+1}.　${label}</span>`).join('')}</div><span class="lkj-help">【↑↓】选择　【确认】进入　【缓解】返回</span>`,'查询选择');return;}
+  if(lkjPhase==='query-record'){
+    const unlock=sim.state.lkjUnlockCorrect?`${scenario.lkjUnlockLabel}　限速${sim.state.lkjUnlockLimit} km/h`:'本次无已完成的非正常行车确认';
+    screen.innerHTML=lkjView(`<p>非正常行车确认记录</p><strong>${unlock}</strong><span class="lkj-help">按【确认】返回查询选择</span>`,'非正常行车记录');return;
+  }
+  if(lkjOperational()&&!['review','reveal'].includes(lkjPhase)){
     const start=sim.state.lkjStartCorrect;const error=sim.state.lkjStartError;const remaining=Math.round(ROUTE_CONTEXT.departureSignalDistance-sim.state.distance);
     const status=start?'LKJ 正常监控':error==='missed'||error==='late'?'开车对标错误已记录':'开车对标待执行';
     const detail=start?'已在规定对标点按压【开车／7】键。':error==='stationary'?'列车尚未起动，不能开车对标。':error==='early'?`距开车对标点约 ${Math.max(0,remaining)} m。`:error==='late'||error==='missed'?'已越过对标点，本项按错误记录。':'列车起动后，在出站信号机对标点按压【开车／7】键。';
     screen.innerHTML=lkjMonitorView();screen.dataset.monitorStatus=status;screen.dataset.monitorDetail=detail;return;
   }
   if(lkjPhase==='done'&&sim.state.lkjAttempted){screen.innerHTML=lkjView(`<p>本次输入存在 ${sim.state.lkjErrors.length} 项不一致</p><strong>考评已记录，允许继续后续作业</strong><span class="lkj-help">本项将在成绩单中按实际正确性计分；按【查询】可重新输入。</span>`,'参数核对记录');return;}
-  if(lkjPhase==='boot'){screen.innerHTML=lkjView('<p>设备自检正常</p><strong>按【查询】进入参数设定</strong><span class="lkj-help">使用显示器下方实体键操作</span>','LKJ2000');return;}
+  if(lkjPhase==='boot'){screen.innerHTML=lkjView('<p>设备自检正常</p><strong>按【设定】进入参数设定</strong><span class="lkj-help">【查询】进入查询选择；使用显示器下方实体键操作</span>','LKJ2000');return;}
   if(lkjPhase==='edit'){
-    const [key,label,target]=lkjFields[lkjFieldIndex];const value=lkjDraft[key]||'';screen.innerHTML=lkjView(`<p>${label}</p><strong class="lkj-input">${value||'_'}</strong><span class="lkj-help">训练值：${target}<br>数字键输入　【←】删除　【↑↓】换项　【→】确认${lkjNotice?`<br>${lkjNotice}`:''}</span>`,`参数输入 ${lkjFieldIndex+1}/${lkjFields.length}`);return;
+    const [key,label,target]=lkjFields[lkjFieldIndex];const value=lkjDraft[key]||'';screen.innerHTML=lkjView(`<p>${label}</p><strong class="lkj-input">${value||'_'}</strong><span class="lkj-help">训练值：${target}<br>数字键输入　【←】删除　【↑↓】换项　【确认】保存本项${lkjNotice?`<br>${lkjNotice}`:''}</span>`,`参数输入 ${lkjFieldIndex+1}/${lkjFields.length}`);return;
   }
-  if(lkjPhase==='review'){screen.innerHTML=lkjView(`<div class="lkj-review">${lkjFields.map(([key,label])=>`<span>${label}</span><strong>${lkjDraft[key]||'—'}</strong>`).join('')}</div><span class="lkj-help">【←】返回修改　【→】进入揭示核对${lkjNotice?`<br>${lkjNotice}`:''}</span>`,'参数核对');return;}
+  if(lkjPhase==='review'){screen.innerHTML=lkjView(`<div class="lkj-review">${lkjFields.map(([key,label])=>`<span>${label}</span><strong>${lkjDraft[key]||'—'}</strong>`).join('')}</div><span class="lkj-help">${lkjReviewOrigin==='query'?'查询只读　【确认】返回':'【←】返回修改　【确认】保存并进入揭示核对'}${lkjNotice?`<br>${lkjNotice}`:''}</span>`,'参数核对');return;}
   const last=lkjNoticeIndex===RUNNING_NOTICES.length-1;
-  screen.innerHTML=lkjView(`<table class="lkj-reveal-table"><thead><tr><th>序号</th><th>运行揭示内容</th></tr></thead><tbody>${RUNNING_NOTICES.map((notice,index)=>`<tr class="${index===lkjNoticeIndex?'selected':''}"><td>${index+1}</td><td>${notice}</td></tr>`).join('')}</tbody></table><strong>${last?'按【→】确认并投入监控':'按【→】查看下一条揭示'}</strong><span class="lkj-help">【←】返回参数${lkjNotice?`<br>${lkjNotice}`:''}</span>`,'全部揭示信息查询');
+  screen.innerHTML=lkjView(`<table class="lkj-reveal-table"><thead><tr><th>序号</th><th>运行揭示内容</th></tr></thead><tbody>${RUNNING_NOTICES.map((notice,index)=>`<tr class="${index===lkjNoticeIndex?'selected':''}"><td>${index+1}</td><td>${notice}</td></tr>`).join('')}</tbody></table><strong>${last?(lkjReviewOrigin==='query'?'按【确认】返回查询选择':'按【确认】完成核对并投入监控'):'按【确认】查看下一条揭示'}</strong><span class="lkj-help">【↑↓】选择　【缓解】返回${lkjNotice?`<br>${lkjNotice}`:''}</span>`,lkjQueryScope==='current'?'当前揭示查询':'全部揭示信息查询');
 }
-function openLkj(mode='normal'){if(!lkjRoot)buildLkj();closeSwitchPanel();closeSignalInspection();closeCredentialModal();closeCir();lkjPhase=lkjOperational()?'done':'boot';lkjUnlockDraft={...(sim.state.lkjUnlockData||{})};lkjUnlockFieldIndex=0;lkjUnlockArmedUntil=0;lkjNoticeIndex=0;lkjNotice=mode==='special-unlock'?'请在监控主界面持续按压【↑】键2秒。':'';lkjDraft=sim.state.lkjData&&!sim.state.lkjData.debug?{...sim.state.lkjData}:{};lkjRoot.classList.add('open');lkjRoot.setAttribute('aria-hidden','false');document.body.classList.add('device-panel-active');renderLkj();}
+function openLkj(mode='normal'){if(!lkjRoot)buildLkj();closeSwitchPanel();closeSignalInspection();closeCredentialModal();closeCir();lkjPhase=lkjOperational()?'done':'boot';lkjUnlockDraft={...(sim.state.lkjUnlockData||{})};lkjUnlockFieldIndex=0;lkjUnlockArmedUntil=0;lkjNoticeIndex=0;lkjQueryIndex=0;lkjQueryScope='all';lkjReviewOrigin='edit';lkjNotice=mode==='special-unlock'?'请在监控主界面持续按压【↑】键2秒。':'';lkjDraft=sim.state.lkjData&&!sim.state.lkjData.debug?{...sim.state.lkjData}:{};lkjRoot.classList.add('open');lkjRoot.setAttribute('aria-hidden','false');document.body.classList.add('device-panel-active');renderLkj();}
 function closeLkj(){if(!lkjRoot)return;clearTimeout(lkjUpHoldTimer);lkjUpHoldTimer=null;lkjRoot.classList.remove('open');lkjRoot.setAttribute('aria-hidden','true');document.body.classList.remove('device-panel-active');}
 function buildSignalInspection(){
   const root=document.createElement('div');root.className='device-modal signal-modal';root.setAttribute('aria-hidden','true');
@@ -486,9 +530,10 @@ function openDeliveredCredential(){
 }
 function buildTrainingControls(){
   const root=$('#training-controls');if(!root)return;
-  root.innerHTML=`<div class="training-row mode-row"><button type="button" data-mode="teaching">教学模式</button><button type="button" data-mode="assessment">考评模式</button></div><div class="training-row scenario-row">${Object.values(SCENARIOS).map((scenario)=>`<button type="button" data-scenario="${scenario.id}">${scenario.shortLabel}</button>`).join('')}</div><p class="equipment-local-note">本窗口只选择模式和场景。信号、机车信号、LKJ、CIR及纸质凭证均须在驾驶台对应设备上直接操作。</p><p class="initial-check-state" data-initial-state>请在驾驶台逐项核对初始位置。</p><div class="initial-check-grid" data-initial-grid>${INITIAL_CHECKS.map(([key,label,target])=>`<button type="button" class="initial-check-card pending" data-initial-card="${key}"><b>${label}</b><span>${target} · 未核对</span></button>`).join('')}</div><div class="training-row"><button type="button" data-training="initial">提交初始位置核对</button></div><p class="training-state" data-training-state></p>`;
+  root.innerHTML=`<div class="training-section-label">训练范围</div><div class="training-row scope-row"><button type="button" data-scope="complete">完整发车作业</button><button type="button" data-scope="smooth-only">平稳起动专项</button></div><div class="training-section-label">教学方式</div><div class="training-row mode-row"><button type="button" data-mode="teaching">教学模式</button><button type="button" data-mode="assessment">考评模式</button></div><div class="training-section-label">场景</div><div class="training-row scenario-row">${Object.values(SCENARIOS).map((scenario)=>`<button type="button" data-scenario="${scenario.id}">${scenario.shortLabel}</button>`).join('')}</div><p class="equipment-local-note">完整训练从初始位置开始；专项训练在选择场景后预置发车条件，学生仍须缓解停放制动并完成平稳起动。信号、LKJ、CIR及凭证均在驾驶台设备上操作。</p><p class="initial-check-state" data-initial-state>请在驾驶台逐项核对初始位置。</p><div class="initial-check-grid" data-initial-grid>${INITIAL_CHECKS.map(([key,label,target])=>`<button type="button" class="initial-check-card pending" data-initial-card="${key}"><b>${label}</b><span>${target} · 未核对</span></button>`).join('')}</div><div class="training-row"><button type="button" data-training="initial">提交初始位置核对</button></div><p class="training-state" data-training-state></p>`;
   root.querySelector('[data-training="initial"]').addEventListener('click',()=>command('initial-confirm'));
   root.querySelectorAll('[data-mode]').forEach(b=>b.addEventListener('click',()=>command('training-mode',b.dataset.mode)));
+  root.querySelectorAll('[data-scope]').forEach(b=>b.addEventListener('click',()=>command('training-scope',b.dataset.scope)));
   root.querySelectorAll('[data-scenario]').forEach(b=>b.addEventListener('click',()=>command('scenario-select',b.dataset.scenario)));
   root.querySelectorAll('[data-initial-card]').forEach((card)=>card.addEventListener('click',()=>focusInitialCheck(card.dataset.initialCard)));
   syncTrainingControls(sim.state);
@@ -503,11 +548,14 @@ function focusInitialCheck(key){
 }
 function syncTrainingControls(state){
   const root=$('#training-controls');if(!root)return;const initialButton=root.querySelector('[data-training="initial"]');initialButton.classList.toggle('active',state.initialConfirmed);
+  const specialty=state.trainingScope==='smooth-only';root.querySelector('[data-initial-grid]').hidden=specialty;initialButton.parentElement.hidden=specialty;
   const checked=INITIAL_CHECKS.filter(([key])=>state.initialChecks?.[key]).length;initialButton.disabled=state.trainingMode==='teaching'&&!state.initialConfirmed&&checked<INITIAL_CHECKS.length;root.querySelector('[data-initial-state]').textContent=state.initialConfirmed?'8项设备初始位置均已完成核对。':state.trainingMode==='assessment'&&state.initialAttempted?`初始位置核对已提交：已核对 ${checked}/${INITIAL_CHECKS.length}，结果将在本次成绩中显示。`:`初始位置已核对 ${checked}/${INITIAL_CHECKS.length}：点击方框可定位设备，实际在驾驶台完成核对。`;
+  if(specialty)root.querySelector('[data-initial-state]').textContent=state.scenarioSelected?'专项训练前置条件已建立：请在驾驶台缓解停放制动后，由牵引低级位平稳起动。':'选择场景后将自动建立专项训练前置条件。';
   for(const [key,label,target] of INITIAL_CHECKS){const card=root.querySelector(`[data-initial-card="${key}"]`);if(!card)continue;const checkedNow=Boolean(state.initialChecks?.[key]);const correct=sim.initialCheckIsCorrect(key);card.classList.remove('pending','current','done','warning');if(checkedNow&&correct){card.classList.add('done');card.querySelector('span').textContent=`${target} · 已核对`;}else if(state.trainingMode==='teaching'&&!correct){card.classList.add('warning');card.querySelector('span').textContent=`${target} · 请调整`;}else if(checked===INITIAL_CHECKS.length&&state.trainingMode==='teaching'){card.classList.add('current');card.querySelector('span').textContent=`${target} · 待复核`;}else{card.classList.add('pending');card.querySelector('span').textContent=state.trainingMode==='assessment'&&checkedNow?`${target} · 已操作`:`${target} · 未核对`;}}
   root.querySelectorAll('[data-mode]').forEach(b=>b.classList.toggle('active',b.dataset.mode===state.trainingMode));
+  root.querySelectorAll('[data-scope]').forEach(b=>b.classList.toggle('active',b.dataset.scope===state.trainingScope));
   root.querySelectorAll('[data-scenario]').forEach(b=>b.classList.toggle('active',b.dataset.scenario===state.scenarioId&&state.scenarioSelected));
-  const scenario=getScenario(state.scenarioId);root.querySelector('[data-training-state]').textContent=`当前：${state.trainingMode==='teaching'?'教学':'考评'}模式 · ${state.scenarioSelected?scenario.label:'未选择场景'}${state.authority?' · 行车凭证已确认':''}`;
+  const scenario=getScenario(state.scenarioId);root.querySelector('[data-training-state]').textContent=`当前：${state.trainingScope==='smooth-only'?'平稳起动专项':'完整发车作业'} · ${state.trainingMode==='teaching'?'教学':'考评'}模式 · ${state.scenarioSelected?scenario.label:'未选择场景'}${state.authority?' · 行车凭证已确认':''}`;
 }
 function buildResultReport(){
   const root=document.createElement('div');root.className='device-modal result-modal';root.setAttribute('aria-hidden','true');
@@ -581,7 +629,7 @@ function render(state,message='') {
   routeScene.setTrainingScenario(state.scenarioId);
   routeScene.setDepartureSignalAspect(state.signalAspect);
   // 线路及地面实体信号机从进入驾驶台起就可见；不得再依赖 LKJ 答对后才显示。
-  routeScene.update(state.distance,state.speed,selectedView,true);
+  routeScene.update(state.distance,state.speed,selectedView,true,state.wholeTrainStartFraction);
   syncSignalTarget(state);
   syncHandSignalCard(state);
   if(selectedView==='front') {
@@ -591,13 +639,15 @@ function render(state,message='') {
     // 临时缩小量程，否则同一压力会落在错误刻度。
     setNeedle(elements.speedNeedle,state.speed,158); setNeedle(elements.mainNeedle,state.mainRes,1600); setNeedle(elements.pipeNeedle,state.trainPipe,1000); setNeedle(elements.eqNeedle,state.equalizingRes,1600); setNeedle(elements.cylNeedle,state.brakeCyl,1600); setNeedle(elements.mainNeedle2,state.mainRes,1600); setNeedle(elements.pipeNeedle2,state.trainPipe,1600); setNeedle(elements.eqNeedle2,state.equalizingRes,1600); setNeedle(elements.cylNeedle2,state.brakeCyl,1600);
     const current=Math.max(0,state.traction)*105; elements.voltageBar.style.transform=`scaleY(${Math.max(.03,state.netVoltage/30)})`; elements.currentBars.forEach((bar,index)=>bar.style.transform=`scaleY(${Math.max(.02,Math.min(1,(current-index*22)/1000))})`);
-    const scenario=getScenario(state.scenarioId);const activeLimit=state.lkjUnlockCorrect&&state.lkjUnlockLimit?state.lkjUnlockLimit:state.limitedStart?15:scenario.requiresLkjUnlock?20:30;
+    const scenario=getScenario(state.scenarioId);const activeLimit=state.lkjUnlockCorrect&&state.lkjUnlockLimit?state.lkjUnlockLimit:state.limitedStart?15:scenario.requiresLkjUnlock?20:80;
     elements.speedDigital.textContent=state.speed<10?state.speed.toFixed(1):Math.round(state.speed); elements.limitDigital.textContent=String(activeLimit); elements.clockDigital.textContent=new Date().toLocaleTimeString('zh-CN',{hour12:false});
     const autoNames=['运转位','初制动位','常用制动Ⅱ','常用制动Ⅲ','常用制动Ⅳ','紧急位'];const independentNames=['缓解位','制动Ⅰ','制动Ⅱ','制动Ⅲ','制动Ⅳ','全制动位'];
     elements.autoPosition.querySelector('span').textContent=autoNames[state.autoBrake];elements.independentPosition.querySelector('span').textContent=independentNames[state.independentBrake];elements.directionPosition.querySelector('span').textContent=state.direction==='F'?'前进位':state.direction==='R'?'后退位':'中立位';elements.tractionPosition.querySelector('span').textContent=state.traction>0?`牵引 ${state.traction} 级`:state.traction<0?`电制动 ${Math.abs(state.traction)} 级`:'零位';
     frame(elements.pantoDisplay,state.panto?1:0,1,2); frame(elements.signal,SIGNAL_ASPECTS[state.signalAspect].frame,4,2);
     const paperAvailable=deliveredCredentialAvailable(state);elements.credentialPaper.hidden=!paperAvailable;elements.credentialPaper.classList.toggle('available',paperAvailable);
   }
+  const rearStatus=overlay.querySelector('[data-rear-lookout-status]');
+  if(rearStatus){const started=Math.min(state.consistCars||12,Math.round((state.wholeTrainStartFraction||0)*(state.consistCars||12)));rearStatus.querySelector('b').textContent=selectedView==='rearLeft'?'左后部瞭望':'右后部瞭望';rearStatus.querySelector('span').textContent=`车列移动确认 ${started}/${state.consistCars||12}辆${state.rearLookCompleted?' · 已完成':' · 持续观察'}`;rearStatus.classList.toggle('complete',Boolean(state.rearLookCompleted));}
   for(const [id] of keys) document.querySelector(`#keys [data-id="${id}"]`)?.classList.toggle('active',activeState(id,state));
   syncSwitchPanel(state);
   if(message&&switchPanelRoot?.classList.contains('open'))setSwitchPanelMessage(message);
@@ -614,8 +664,8 @@ function renderSmoothStartPanel(state){
   setText('#metric-traction',state.traction>0?`${state.traction}级`:'零位');
   setText('#metric-start',`${startedCars}/${state.consistCars||12}辆`);
   const acceleration=Math.abs(state.currentAcceleration||0);const jerk=Math.abs(state.currentJerk||0);
-  setText('#metric-acceleration',acceleration<=.42?'平稳':'偏大');
-  setText('#metric-jerk',jerk<=.48?'正常':'过大');
+  setText('#metric-acceleration',acceleration<=TRAIN_DYNAMICS.comfort.warningAcceleration?'平稳':'偏大');
+  setText('#metric-jerk',jerk<=TRAIN_DYNAMICS.comfort.warningJerk?'正常':'过大');
   setText('#metric-lkj',state.lkjStartCorrect?'已对标':`${Math.max(0,Math.round(ROUTE_CONTEXT.departureSignalDistance-state.distance))} m`);
   const guide=$('#smooth-guide');if(!guide)return;
   const items=[
@@ -631,7 +681,7 @@ function renderSmoothStartPanel(state){
 }
 function stopHorn(event){if(hornPointerId===null)return;if(event?.pointerId!==undefined&&event.pointerId!==hornPointerId)return;hornPointerId=null;hornAudio.pause();hornAudio.currentTime=0;if(sim.state.hornActive)command('horn-stop');elements.hornButton?.classList.remove('pressed');}
 function buildKeys(){if(!debugMode)return;document.body.classList.add('debug-mode');const root=$('#keys');keys.forEach(([id,name])=>{const b=document.createElement('button');b.dataset.id=id;b.textContent=name;b.addEventListener('click',()=>command(id));root.append(b);});}
-function setView(view){closeDevicePanels();selectedView=view;const cab=$('#cab');cab.src=`./assets/archive-cabview/${views[view]||views.front}`;cab.classList.toggle('side-view',view!=='front');cab.classList.toggle('rear-view',view==='rearLeft'||view==='rearRight');routeScene.setView(view);document.querySelectorAll('[data-view]').forEach(b=>b.classList.toggle('active',b.dataset.view===view));if(view==='front')createFront();else overlay.replaceChildren();render(sim.state);}
+function setView(view){closeDevicePanels();selectedView=view;const cab=$('#cab');cab.src=`./assets/archive-cabview/${views[view]||views.front}`;cab.classList.toggle('side-view',view!=='front');cab.classList.toggle('rear-view',view==='rearLeft'||view==='rearRight');routeScene.setView(view);document.querySelectorAll('[data-view]').forEach(b=>b.classList.toggle('active',b.dataset.view===view));if(view==='front')createFront();else{overlay.replaceChildren();if(view==='rearLeft'||view==='rearRight'){const status=document.createElement('section');status.className='rear-lookout-status';status.dataset.rearLookoutStatus='';status.innerHTML='<b>后部瞭望</b><span>车列移动确认 0/12辆 · 持续观察</span><small>窗口外显示本务机车后方车列，车辆按车钩力传播依次起动</small>';overlay.append(status);}}render(sim.state);}
 function setControlDrawer(targetId=null){
   const drawers=['workflow','training'];
   for(const id of drawers){

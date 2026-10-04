@@ -202,16 +202,20 @@ export class MstsRouteScene {
   }
 
   buildPassengerConsist(count = 12) {
-    const bodyMaterial = new THREE.MeshStandardMaterial({ color: '#d8dedf', roughness: 0.68, metalness: 0.26 });
-    const bandMaterial = new THREE.MeshStandardMaterial({ color: '#225e88', roughness: 0.72, metalness: 0.12 });
-    const windowMaterial = new THREE.MeshStandardMaterial({ color: '#172a38', roughness: 0.25, metalness: 0.15, emissive: '#102331', emissiveIntensity: 0.25 });
+    const bodyMaterial = new THREE.MeshStandardMaterial({ color: '#d9ddda', roughness: 0.68, metalness: 0.22 });
+    const bandMaterial = new THREE.MeshStandardMaterial({ color: '#21628c', roughness: 0.72, metalness: 0.12 });
+    const windowMaterial = new THREE.MeshStandardMaterial({ color: '#142a39', roughness: 0.22, metalness: 0.15, emissive: '#102b3a', emissiveIntensity: 0.32 });
     const roofMaterial = new THREE.MeshStandardMaterial({ color: '#8e999e', roughness: 0.82, metalness: 0.18 });
     const underframeMaterial = new THREE.MeshStandardMaterial({ color: '#20282b', roughness: 0.88, metalness: 0.35 });
+    const doorMaterial = new THREE.MeshStandardMaterial({ color: '#c8cdca', roughness: 0.7, metalness: 0.18 });
     const bodyGeometry = new THREE.BoxGeometry(3.1, 3.55, 24.5);
     const bandGeometry = new THREE.BoxGeometry(3.15, 0.48, 24.55);
-    const windowGeometry = new THREE.BoxGeometry(3.17, 0.72, 20.8);
+    const windowGeometry = new THREE.BoxGeometry(0.055, 0.72, 1.38);
     const roofGeometry = new THREE.BoxGeometry(3.0, 0.28, 24.1);
     const underframeGeometry = new THREE.BoxGeometry(2.7, 0.52, 22.5);
+    const doorGeometry = new THREE.BoxGeometry(0.06, 2.35, 1.55);
+    const doorWindowGeometry = new THREE.BoxGeometry(0.065, 0.62, 0.74);
+    const bogieGeometry = new THREE.BoxGeometry(2.72, 0.55, 3.0);
     for (let index = 0; index < count; index += 1) {
       const car = new THREE.Group();
       car.name = `PASSENGER_CAR_${String(index + 1).padStart(2, '0')}`;
@@ -221,18 +225,37 @@ export class MstsRouteScene {
       const band = new THREE.Mesh(bandGeometry, bandMaterial);
       band.position.y = 1.65;
       car.add(band);
-      const windows = new THREE.Mesh(windowGeometry, windowMaterial);
-      windows.position.y = 2.85;
-      car.add(windows);
+      for (const side of [-1, 1]) {
+        for (let windowIndex = 0; windowIndex < 10; windowIndex += 1) {
+          const window = new THREE.Mesh(windowGeometry, windowMaterial);
+          window.position.set(side * 1.57, 2.85, -9.2 + windowIndex * 2.05);
+          car.add(window);
+        }
+        for (const doorZ of [-11.25, 11.25]) {
+          const door = new THREE.Mesh(doorGeometry, doorMaterial);
+          door.position.set(side * 1.575, 2.12, doorZ);
+          car.add(door);
+          const doorWindow = new THREE.Mesh(doorWindowGeometry, windowMaterial);
+          doorWindow.position.set(side * 1.61, 2.76, doorZ);
+          car.add(doorWindow);
+        }
+      }
       const roof = new THREE.Mesh(roofGeometry, roofMaterial);
       roof.position.y = 4.34;
       car.add(roof);
       const underframe = new THREE.Mesh(underframeGeometry, underframeMaterial);
       underframe.position.y = 0.55;
       car.add(underframe);
+      for (const bogieZ of [-7.7, 7.7]) {
+        const bogie = new THREE.Mesh(bogieGeometry, underframeMaterial);
+        bogie.position.set(0, 0.22, bogieZ);
+        car.add(bogie);
+      }
       // 以司机视点为列车前端参考。HXD1C 车体与连挂间距计入首辆客车中心距，
       // 避免后部瞭望镜头落入第一辆客车端面。
       car.userData.trainOffset = 33 + index * 25.8;
+      car.userData.consistIndex = index;
+      car.userData.consistCount = count;
       this.routeRoot.add(car);
       this.passengerCars.push(car);
     }
@@ -256,12 +279,17 @@ export class MstsRouteScene {
     return target.normalize();
   }
 
-  updatePassengerConsist() {
+  updatePassengerConsist(startFraction = this.wholeTrainStartFraction ?? 1) {
     if (!this.passengerCars.length) return;
-    const routeDistance = this.startOffset + this.distance;
     const point = new THREE.Vector3();
     const tangent = new THREE.Vector3();
     this.passengerCars.forEach((car) => {
+      // 起动初段按车钩力由前向后传播。每辆车达到自己的传播阈值后才开始
+      // 跟随机车移动；全列起动后所有车辆恢复正常等距跟随。
+      const count = Math.max(1, car.userData.consistCount || this.passengerCars.length);
+      const index = car.userData.consistIndex || 0;
+      const movementRatio = THREE.MathUtils.clamp(startFraction * count - index, 0, 1);
+      const routeDistance = this.startOffset + this.distance * movementRatio;
       const carDistance = routeDistance - car.userData.trainOffset;
       this.getExtendedPathPosition(carDistance, point);
       this.getExtendedPathTangent(carDistance, tangent);
@@ -470,8 +498,7 @@ export class MstsRouteScene {
   }
 
   buildSourceDepartureSignal(data) {
-    // 使用原发车作业内宜线场景中的两架矮型出站信号机作为课堂三维载体。
-    // 行车凭证内容和录音仍按株洲课堂任务执行，不能把该三维载体冒充株洲实景。
+    // 使用当前课堂线路中的两架矮型出站信号机，统一作为株洲站1道发车场景。
     const selectSignal = (uid, expectedDistance) => {
       const candidates = data.instances
         .filter((item) => item.uid === uid && item.type === 'SignalObj' && item.shape === 'chuzhan-halfauto-zhuci.s')
@@ -714,13 +741,14 @@ export class MstsRouteScene {
     this.applyCamera();
   }
 
-  update(distance, speed, view = this.view, signalVisible = false) {
+  update(distance, speed, view = this.view, signalVisible = false, wholeTrainStartFraction = 1) {
     this.distance = Math.max(0, Number(distance) || 0);
     this.speed = Math.max(0, Number(speed) || 0);
+    this.wholeTrainStartFraction = THREE.MathUtils.clamp(Number(wholeTrainStartFraction) || 0, 0, 1);
     this.view = view;
     this.canvas.classList.toggle('live', this.ready && (this.distance > 0.2 || view !== 'front' || signalVisible));
     this.updateAtmosphere();
-    this.updatePassengerConsist();
+    this.updatePassengerConsist(this.wholeTrainStartFraction);
     this.applyCamera();
     this.updateSignalTeachingVisibility();
   }

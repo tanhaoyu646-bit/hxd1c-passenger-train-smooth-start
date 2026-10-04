@@ -1,4 +1,4 @@
-import { SIGNAL_ASPECTS, getLkjMismatchFields } from './scenario.js?rev=lkj-cir-gauge-alignment-v1-20260928';
+import { LKJ_TRAINING_PARAMETERS, SIGNAL_ASPECTS, TRAIN_DYNAMICS, getLkjMismatchFields } from './scenario.js?rev=smooth-start-v14-lkj-integration';
 import { getScenario, ROUTE_CONTEXT } from './credentialScenario.js?rev=lkj-cir-gauge-alignment-v1-20260928';
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
@@ -32,7 +32,7 @@ export class TrainSimulation {
       lkjUnlockCombinationAttempted: false, lkjUnlockCombinationCorrect: false, lkjUnlockLimit: 0,
       lkjUnlockMethodErrorRecorded: false, lkjUnlockFieldsErrorRecorded: false, lkjUnlockCombinationErrorRecorded: false,
       panto: false, mainBreaker: false, compressor: false,
-      parkingBrake: true, authority: false, trainingMode: 'teaching', signalAspect: 'green', signalObserved: false, signalAnswer: null,
+      parkingBrake: true, authority: false, trainingMode: 'teaching', trainingScope: 'complete', signalAspect: 'green', signalObserved: false, signalAnswer: null,
       signalMeaningCorrect: false, handSignalRequired: true, handSignalConfirmed: false,
       scenarioId: 'normal', scenarioSelected: false, credentialStage: 'select',
       radioContacted: false, radioResponseAttempted: false, radioResponseCorrect: false,
@@ -164,6 +164,71 @@ export class TrainSimulation {
       s.authority = Boolean(lkjReady && tailReady && s.credentialConfirmed && specialUnlockReady && (s.credentialCorrect || this.isAssessment()) && (!s.handSignalRequired || s.handSignalConfirmed));
     }
   }
+  applySmoothStartPreset() {
+    const s = this.state;
+    const scenario = getScenario(s.scenarioId);
+    s.initialChecks = Object.fromEntries(Object.keys(INITIAL_CHECK_LABELS).map((key) => [key, true]));
+    s.initialConfirmed = true;
+    s.initialAttempted = true;
+    s.lkjData = { ...LKJ_TRAINING_PARAMETERS };
+    s.lkjAttempted = true;
+    s.lkjCorrect = true;
+    s.lkjConfirmed = true;
+    s.panto = true;
+    s.netVoltage = 25;
+    s.mainBreaker = true;
+    s.compressor = true;
+    s.mainRes = 850;
+    s.equalizingRes = 600;
+    s.trainPipe = 600;
+    s.tailPipe = 598;
+    s.brakeCyl = 0;
+    s.brakeTested = true;
+    s.releaseObserved = true;
+    s.releasePropagation = 1;
+    s.autoBrake = 0;
+    s.independentBrake = 0;
+    s.tailDeviceId = '202601';
+    s.tailDeviceLinked = true;
+    s.tailPressureQueried = true;
+    s.tailPressureValue = 598;
+    s.radioContacted = true;
+    s.radioResponseAttempted = true;
+    s.radioResponseCorrect = true;
+    s.orderSigned = true;
+    s.credentialPresented = Boolean(scenario.documentTitle);
+    s.credentialAttempted = true;
+    s.credentialCorrect = true;
+    s.directionObserved = true;
+    s.directionCorrect = true;
+    s.signalObserved = scenario.id !== 'weather';
+    s.signalAnswer = scenario.id === 'weather' ? null : scenario.signalAspect;
+    s.signalMeaningCorrect = scenario.id !== 'weather';
+    s.locomotiveSignalObserved = true;
+    s.weatherReportSent = scenario.id === 'weather';
+    s.departureNoticeReceived = scenario.id !== 'normal';
+    s.limitedStart = scenario.id === 'weather';
+    s.credentialStage = scenario.id === 'weather' ? 'limited-start' : 'ready';
+    s.handSignalConfirmed = true;
+    s.lkjUnlockRequired = Boolean(scenario.requiresLkjUnlock);
+    s.lkjUnlockAttempted = Boolean(scenario.requiresLkjUnlock);
+    s.lkjUnlockMethod = scenario.lkjUnlockMethod || '';
+    s.lkjUnlockMethodAttempted = Boolean(scenario.requiresLkjUnlock);
+    s.lkjUnlockMethodCorrect = Boolean(scenario.requiresLkjUnlock);
+    s.lkjUnlockFieldsAttempted = Boolean(scenario.requiresLkjUnlock);
+    s.lkjUnlockFieldsCorrect = Boolean(scenario.requiresLkjUnlock);
+    s.lkjUnlockData = Object.fromEntries((scenario.lkjUnlockFields || []).map(([key, , expected]) => [key, expected]));
+    s.lkjUnlockCombinationAttempted = Boolean(scenario.requiresLkjUnlock);
+    s.lkjUnlockCombinationCorrect = Boolean(scenario.requiresLkjUnlock);
+    s.lkjUnlockCorrect = Boolean(scenario.requiresLkjUnlock);
+    s.lkjUnlockLimit = Number(scenario.lkjUnlockLimit || 0);
+    s.headlight = true;
+    s.horn = true;
+    s.direction = 'F';
+    // 专项训练仍要求学生亲自缓解停放制动，再由零位加载牵引。
+    s.parkingBrake = true;
+    this.syncAuthority();
+  }
   command(id, value) {
     const s = this.state;
     if (id === 'initial-inspect') {
@@ -212,6 +277,7 @@ export class TrainSimulation {
       s.rearLookSeconds = 0; s.rearLookCompleted = false;
       s.currentAcceleration = 0; s.currentJerk = 0; s.smoothSeconds = 0; s.smoothStartQualified = false;
       this.syncAuthority();
+      if (s.trainingScope === 'smooth-only') this.applySmoothStartPreset();
       this.emit(`已选择“${scenario.label}”场景：${scenario.description}`);
       return true;
     }
@@ -395,6 +461,25 @@ export class TrainSimulation {
       s.trainingMode = value;
       this.emit(value === 'teaching' ? '已进入教学模式。' : '已进入考评模式：错误将记录在本次成绩中。'); return true;
     }
+    if (id === 'training-scope') {
+      if (!['complete', 'smooth-only'].includes(value)) return this.reject('未识别的训练范围。');
+      if (s.trainingScope !== value && s.scenarioSelected) {
+        const mode = s.trainingMode;
+        this.reset();
+        this.state.trainingMode = mode;
+        this.state.trainingScope = value;
+        this.emit(value === 'complete'
+          ? '已切换为完整发车作业训练，当前练习已复位，请重新选择场景。'
+          : '已切换为平稳起动专项训练，当前练习已复位，请重新选择场景。');
+        return true;
+      }
+      s.trainingScope = value;
+      if (value === 'smooth-only' && s.scenarioSelected) this.applySmoothStartPreset();
+      this.emit(value === 'complete'
+        ? '已选择完整发车作业训练。'
+        : '已选择平稳起动专项训练；选择场景后将从发车条件基本具备状态开始。');
+      return true;
+    }
     if (id === 'signal-aspect') {
       if (s.trainingMode !== 'teaching') return this.reject('考评模式不允许手动改变信号。');
       if (!SIGNAL_ASPECTS[value]) return this.reject('未识别的信号显示。');
@@ -468,7 +553,7 @@ export class TrainSimulation {
       this.emit(next ? '调试快捷操作：三项控制电源已接通。' : '调试快捷操作：三项控制电源已断开。'); return true;
     }
     if (id === 'lkj-confirm') {
-      const required = ['driverId', 'assistantId', 'section', 'station', 'trainNo', 'trainType', 'weight', 'cars', 'length'];
+      const required = ['driverId', 'assistantId', 'section', 'station', 'trainNo', 'trainType', 'weight', 'cars', 'length', 'locomotiveCount', 'speedLevel', 'stationYard', 'track', 'runDirection', 'endStation', 'runPath'];
       const missing = !value ? required : required.filter((key) => String(value[key] ?? '').trim() === '');
       const incorrect = missing.length ? required : getLkjMismatchFields(value);
       if (!this.initialWorkflowReady() && !this.isAssessment()) return this.reject('请先确认设备初始位置。');
@@ -594,12 +679,16 @@ export class TrainSimulation {
     s.releasePropagation += ((brakesReleased ? 1 : 0) - s.releasePropagation) * Math.min(1, dt * (brakesReleased ? .34 : 1.2));
     s.actualTraction += ((s.traction > 0 ? s.traction : 0) - s.actualTraction) * Math.min(1, dt * .72);
     const tractionAllowed = this.tractionInterlockReasons().length === 0;
-    s.tractionForce = tractionAllowed && s.actualTraction > 0 ? s.actualTraction * 68000 * Math.max(.34, 1 - s.speed / 125) : 0;
+    s.tractionForce = tractionAllowed && s.actualTraction > 0
+      ? Math.min(TRAIN_DYNAMICS.maxStartingTractiveEffortN, s.actualTraction * TRAIN_DYNAMICS.tractionForcePerNotchN) * Math.max(.34, 1 - s.speed / 125)
+      : 0;
     const electricBrake = s.traction < 0 ? Math.abs(s.traction) * 43000 : 0;
     const parkingBrakeForce = s.parkingBrake ? 450000 : 0;
     s.brakeForce = s.brakeCyl * 1250 + electricBrake + parkingBrakeForce;
-    const mass = 850000; const resistance = 13000 + 34 * s.speed + 1.2 * s.speed * s.speed;
-    const acceleration = (s.tractionForce - s.brakeForce - resistance) / mass;
+    const resistance = TRAIN_DYNAMICS.baseResistanceN
+      + TRAIN_DYNAMICS.linearResistancePerKmh * s.speed
+      + TRAIN_DYNAMICS.quadraticResistancePerKmh2 * s.speed * s.speed;
+    const acceleration = (s.tractionForce - s.brakeForce - resistance) / TRAIN_DYNAMICS.totalMassKg;
     const actual = s.speed <= 0 && acceleration < 0 ? 0 : acceleration;
     const activeLimit = s.lkjUnlockCorrect && s.lkjUnlockLimit > 0 ? s.lkjUnlockLimit : s.limitedStart ? 15 : 120;
     s.speed = clamp(s.speed + actual * dt * 3.6, 0, activeLimit); s.distance += s.speed / 3.6 * dt;
@@ -621,7 +710,9 @@ export class TrainSimulation {
     s.currentAcceleration = actual;
     s.currentJerk = (actual - s.lastAcceleration) / Math.max(dt, .01);
     s.maxAcceleration = Math.max(s.maxAcceleration, Math.abs(actual)); s.maxJerk = Math.max(s.maxJerk, Math.abs(s.currentJerk)); s.lastAcceleration = actual;
-    const smoothNow = s.speed >= 5 && s.speed <= 15 && s.wholeTrainStarted && Math.abs(s.currentAcceleration) <= .42 && Math.abs(s.currentJerk) <= .48;
+    const smoothNow = s.speed >= 5 && s.speed <= 15 && s.wholeTrainStarted
+      && Math.abs(s.currentAcceleration) <= TRAIN_DYNAMICS.comfort.warningAcceleration
+      && Math.abs(s.currentJerk) <= TRAIN_DYNAMICS.comfort.warningJerk;
     s.smoothSeconds = smoothNow ? s.smoothSeconds + dt : 0;
     if (!s.smoothStartQualified && s.smoothSeconds >= 2) {
       s.smoothStartQualified = true;

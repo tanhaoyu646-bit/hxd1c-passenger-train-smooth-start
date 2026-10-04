@@ -30,6 +30,13 @@ export const LKJ_TRAINING_PARAMETERS = {
   weight: '850',
   cars: '12',
   length: '330',
+  locomotiveCount: '1',
+  speedLevel: '120',
+  stationYard: '1',
+  track: '1',
+  runDirection: '2',
+  endStation: '204',
+  runPath: '1',
 };
 
 export const LKJ_FIELD_DEFINITIONS = [
@@ -42,7 +49,38 @@ export const LKJ_FIELD_DEFINITIONS = [
   ['weight', '总重（t）', '850（教学值）'],
   ['cars', '辆数', '12'],
   ['length', '列车长度（m）', '330（教学值）'],
+  ['locomotiveCount', '机车台数', '1'],
+  ['speedLevel', '速度等级（km/h）', '120'],
+  ['stationYard', '站场号', '1'],
+  ['track', '股道号', '1'],
+  ['runDirection', '运行方向代码', '2＝七斗冲方向（教学）'],
+  ['endStation', '终到站代码', '204（教学）'],
+  ['runPath', '运行径路号', '1（教学）'],
 ];
+
+// HXD1C＋12辆旅客列车的课堂动力标定。机车整备质量和最大起动牵引力
+// 采用公开车型数据；客车质量、阻力和舒适性阈值为本实训的教学等效值。
+export const TRAIN_DYNAMICS = {
+  locomotiveMassKg: 138000,
+  coachCount: 12,
+  coachAverageMassKg: 59300,
+  totalMassKg: 850000,
+  maxStartingTractiveEffortN: 520000,
+  tractionNotches: 7,
+  tractionForcePerNotchN: 74000,
+  baseResistanceN: 13000,
+  linearResistancePerKmh: 34,
+  quadraticResistancePerKmh2: 1.2,
+  consistPropagationSeconds: 6,
+  comfort: {
+    preferredAcceleration: 0.28,
+    warningAcceleration: 0.42,
+    severeAcceleration: 0.55,
+    preferredJerk: 0.22,
+    warningJerk: 0.48,
+    severeJerk: 0.75,
+  },
+};
 
 export const RUNNING_NOTICES = [
   '株洲站 1 道出发，运行方向：七斗冲方向。',

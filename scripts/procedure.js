@@ -1,3 +1,5 @@
+import { TRAIN_DYNAMICS } from './scenario.js?rev=smooth-start-v14-lkj-integration';
+
 const scenarioSignalReady = (s) => s.scenarioId === 'weather'
   ? s.locomotiveSignalObserved
   : s.signalObserved && s.locomotiveSignalObserved;
@@ -40,7 +42,6 @@ export function procedureState(state) {
   const current = complete.findIndex((done) => !done);
   return { complete, current: current < 0 ? PROCEDURE.length - 1 : current, done: complete.every(Boolean) };
 }
-
 function credentialStepEarned(state) {
   const locked = new Set(state.assessmentCredentialLocks || []);
   if (!state.lkjUnlockRequired) {
@@ -79,7 +80,7 @@ export function scoreRun(state) {
     state.rejected * 2
     + state.abrupt * 2
     + (state.prematureAcceleration ? 6 : 0)
-    + (state.maxAcceleration > .55 ? 4 : 0)
-    + (state.maxJerk > .75 ? 4 : 0));
+    + (state.maxAcceleration > TRAIN_DYNAMICS.comfort.severeAcceleration ? 4 : 0)
+    + (state.maxJerk > TRAIN_DYNAMICS.comfort.severeJerk ? 4 : 0));
   return { score: Math.max(0, Math.min(100, base - deductions)), completed: p.complete.filter(Boolean).length, deductions, itemScores };
 }

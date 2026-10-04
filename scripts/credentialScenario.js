@@ -92,9 +92,9 @@ export const SCENARIOS = {
 };
 
 export const ROUTE_CONTEXT = {
-  // 三维载体切换回原发车作业内宜线；行车凭证和录音仍按本项目的株洲课堂任务执行。
+  // 课堂训练统一使用当前三维线路作为株洲站1道发车场景。
   visualRoute: 'neiyi',
-  visualStation: '内江站—内江南方向（既有发车作业三维载体）',
+  visualStation: '株洲站1道—七斗冲方向',
   station: '株洲站',
   track: '1道',
   direction: '七斗冲方向',

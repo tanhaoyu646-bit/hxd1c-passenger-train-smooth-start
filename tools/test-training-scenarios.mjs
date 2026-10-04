@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { TrainSimulation } from '../scripts/dynamics.js';
-import { LKJ_TRAINING_PARAMETERS } from '../scripts/scenario.js';
+import { LKJ_FIELD_DEFINITIONS, LKJ_TRAINING_PARAMETERS, TRAIN_DYNAMICS } from '../scripts/scenario.js';
 import { ROUTE_CONTEXT, getScenario } from '../scripts/credentialScenario.js';
 import { PROCEDURE, procedureState, scoreRun } from '../scripts/procedure.js';
 
@@ -179,5 +179,24 @@ assert.equal(assessmentMismatch.state.signalMismatch, true, '考评模式信号�
 assert.equal(assessmentMismatch.state.traction, 0);
 assert.equal(assessmentMismatch.state.autoBrake, 5);
 
+assert.equal(LKJ_FIELD_DEFINITIONS.length, 16, 'LKJ参数设定应覆盖本任务所需16项字段');
+assert.equal(TRAIN_DYNAMICS.totalMassKg, 850000);
+assert.equal(TRAIN_DYNAMICS.tractionForcePerNotchN * TRAIN_DYNAMICS.tractionNotches >= 510000, true, '七级牵引应接近HXD1C最大起动牵引力');
+
+const specialty = new TrainSimulation();
+assert.equal(specialty.command('training-scope', 'smooth-only'), true);
+assert.equal(specialty.command('scenario-select', 'normal'), true);
+assert.equal(specialty.state.initialConfirmed, true);
+assert.equal(specialty.state.lkjConfirmed, true);
+assert.equal(specialty.state.brakeTested, true);
+assert.equal(specialty.state.releaseObserved, true);
+assert.equal(specialty.state.authority, true);
+assert.equal(specialty.state.direction, 'F');
+assert.equal(specialty.state.parkingBrake, true, '专项训练仍应要求学生亲自缓解停放制动');
+assert.equal(specialty.command('parking-release'), true);
+assert.equal(specialty.command('traction', 1), true);
+for (let index = 0; index < 600; index += 1) specialty.tick(0.05, 'rearLeft');
+assert(specialty.state.distance > 0, '专项训练应能实际起动列车');
+
 assert.equal(PROCEDURE.reduce((sum, [, , weight]) => sum + weight, 0), 100);
-console.log('Training scenarios valid: four scenarios, LKJ 60/45 unlock, assessment soft gates, and hard mismatch stop passed.');
+console.log('Training scenarios valid: four scenarios, expanded LKJ data, specialty preset, 60/45 unlock, assessment soft gates, and hard mismatch stop passed.');
