@@ -1,8 +1,8 @@
-import { TrainSimulation } from './dynamics.js?rev=smooth-start-v14-lkj-integration';
-import { PROCEDURE, procedureState, scoreRun } from './procedure.js?rev=smooth-start-v14-lkj-integration';
-import { MstsRouteScene } from './mstsRouteScene.js?rev=smooth-start-v14-lkj-integration';
-import { LKJ_FIELD_DEFINITIONS, RUNNING_NOTICES, SIGNAL_ASPECTS, TRAIN_DYNAMICS } from './scenario.js?rev=smooth-start-v14-lkj-integration';
-import { SCENARIOS, ROUTE_CONTEXT, getScenario, scenarioAudioPath } from './credentialScenario.js?rev=smooth-start-v14-lkj-integration';
+import { TrainSimulation } from './dynamics.js?rev=smooth-start-v15-original-lkj-rear-view';
+import { PROCEDURE, procedureState, scoreRun } from './procedure.js?rev=smooth-start-v15-original-lkj-rear-view';
+import { MstsRouteScene } from './mstsRouteScene.js?rev=smooth-start-v15-original-lkj-rear-view';
+import { LKJ_FIELD_DEFINITIONS, RUNNING_NOTICES, SIGNAL_ASPECTS, TRAIN_DYNAMICS } from './scenario.js?rev=smooth-start-v15-original-lkj-rear-view';
+import { SCENARIOS, ROUTE_CONTEXT, getScenario, scenarioAudioPath } from './credentialScenario.js?rev=smooth-start-v15-original-lkj-rear-view';
 
 const $ = (q) => document.querySelector(q);
 const sim = new TrainSimulation();
@@ -168,13 +168,30 @@ function openPowerCabinet(){if(!powerCabinetRoot)buildPowerCabinet();closeLkj();
 function closePowerCabinet(){if(!powerCabinetRoot)return;powerCabinetRoot.classList.remove('open');powerCabinetRoot.setAttribute('aria-hidden','true');document.body.classList.remove('device-panel-active');}
 
 const lkjFields=LKJ_FIELD_DEFINITIONS;
+const lkjResource=(name)=>`./assets/lkj/original-resources/${name}`;
+// 按键图直接提取自用户提供的 LKJ2000.exe Qt 资源。第一张为释放态，第二张为按下态。
 const lkjKeyDefs=[
-  ['alarm','警惕',134,532,52,57],['unlock','解锁',187,510,50,40],['relief','缓解',187,550,50,40],
-  ['digit-1','向前／1',238,510,51,40],['digit-6','向后／6',238,550,51,40],['digit-2','调车／2',290,510,51,40],['digit-7','开车／7',290,550,51,40],
-  ['digit-3','车位／3',343,510,51,40],['digit-8','自动校正／8',343,550,51,40],['digit-4','进路号／4',395,510,51,40],['digit-9','出入库／9',395,550,51,40],
-  ['digit-5','定标／5',447,510,51,40],['digit-0','巡检／0',447,550,51,40],['query','查询',499,510,53,40],['left','左箭头／删除',499,550,53,40],
-  ['up','上箭头',553,510,51,40],['down','下箭头',553,550,51,40],['dump','转储',604,510,50,40],['right','右箭头',604,550,50,40],
-  ['setting','设定',656,510,50,40],['confirm','确认',656,550,50,40],
+  ['alarm','警惕',134,532,52,57,'lkj-resource-01-63x55.png','lkj-resource-20-63x55.png'],
+  ['unlock','解锁',187,510,50,40,'lkj-resource-32-65x40.png','lkj-resource-14-65x40.png'],
+  ['relief','缓解',187,550,50,40,'lkj-resource-19-65x40.png','lkj-resource-06-65x40.png'],
+  ['digit-1','向前／1',238,510,51,40,'lkj-resource-03-65x40.png','lkj-resource-35-65x40.png'],
+  ['digit-6','向后／6',238,550,51,40,'lkj-resource-05-65x40.png','lkj-resource-36-65x40.png'],
+  ['digit-2','调车／2',290,510,51,40,'lkj-resource-30-65x40.png','lkj-resource-45-65x40.png'],
+  ['digit-7','开车／7',290,550,51,40,'lkj-resource-02-65x40.png','lkj-resource-16-65x40.png'],
+  ['digit-3','车位／3',343,510,51,40,'lkj-resource-40-65x40.png','lkj-resource-46-65x40.png'],
+  ['digit-8','自动校正／8',343,550,51,40,'lkj-resource-47-65x40.png','lkj-resource-13-65x40.png'],
+  ['digit-4','进路号／4',395,510,51,40,'lkj-resource-38-65x40.png','lkj-resource-22-65x40.png'],
+  ['digit-9','出入库／9',395,550,51,40,'lkj-resource-34-65x40.png','lkj-resource-09-65x40.png'],
+  ['digit-5','定标／5',447,510,51,40,'lkj-resource-24-65x40.png','lkj-resource-37-65x40.png'],
+  ['digit-0','巡检／0',447,550,51,40,'lkj-resource-26-65x40.png','lkj-resource-49-65x40.png'],
+  ['query','查询',499,510,53,40,'lkj-resource-08-65x40.png','lkj-resource-29-65x40.png'],
+  ['left','左箭头／删除',499,550,53,40,'lkj-resource-21-65x40.png','lkj-resource-48-65x40.png'],
+  ['up','上箭头',553,510,51,40,'lkj-resource-12-65x40.png','lkj-resource-41-65x40.png'],
+  ['down','下箭头',553,550,51,40,'lkj-resource-25-65x40.png','lkj-resource-04-65x40.png'],
+  ['dump','转储',604,510,50,40,'lkj-resource-07-65x40.png','lkj-resource-11-65x40.png'],
+  ['right','右箭头',604,550,50,40,'lkj-resource-10-65x40.png','lkj-resource-33-65x40.png'],
+  ['setting','设定',656,510,50,40,'lkj-resource-15-65x40.png','lkj-resource-17-65x40.png'],
+  ['confirm','确认',656,550,50,40,'lkj-resource-23-65x40.png','lkj-resource-31-65x40.png'],
 ];
 const LKJ_QUERY_OPTIONS=[
   ['parameters','参数显示'],['current-reveal','当前揭示查询'],['all-reveal','全部揭示查询'],['nonnormal-record','非正常行车记录'],['return','返回监控'],
@@ -192,7 +209,7 @@ function buildLkj(){
   root.innerHTML=`<div class="device-shell lkj-shell" role="dialog" aria-modal="true" aria-label="LKJ2000监控装置"><div class="device-head"><div><strong>LKJ2000 监控装置</strong><span>输入参数并核对运行揭示</span></div><button type="button" class="device-close" aria-label="关闭">×</button></div><div class="lkj-device"><img src="./assets/lkj/LKJ2000.png" alt="LKJ2000设备面板"><div class="lkj-screen"></div><div class="lkj-keypad"></div></div></div>`;
   root.querySelector('.device-close').addEventListener('click',closeLkj);root.addEventListener('click',(event)=>{if(event.target===root)closeLkj();});
   const keypad=root.querySelector('.lkj-keypad');
-  for(const [id,label,x,y,w,h] of lkjKeyDefs){const button=document.createElement('button');button.type='button';button.dataset.lkjKey=id;button.setAttribute('aria-label',label);button.style.left=pct(x,800);button.style.top=pct(y,600);button.style.width=pct(w,800);button.style.height=pct(h,600);if(id==='setting'||id==='confirm'){button.classList.add('lkj-added-key');button.textContent=label;}const release=()=>{button.classList.remove('pressed');if(id==='up'){clearTimeout(lkjUpHoldTimer);lkjUpHoldTimer=null;}};button.addEventListener('pointerdown',()=>{button.classList.add('pressed');if(id==='up'&&lkjOperational()&&lkjPhase==='done'){clearTimeout(lkjUpHoldTimer);lkjUpHoldTriggered=false;lkjUpHoldTimer=setTimeout(()=>{lkjUpHoldTriggered=true;openLkjNonnormalMenu();},2000);}});button.addEventListener('pointerup',release);button.addEventListener('pointercancel',release);button.addEventListener('pointerleave',release);button.addEventListener('click',()=>{if(id==='up'&&lkjUpHoldTriggered){lkjUpHoldTriggered=false;return;}handleLkjKey(id);});keypad.append(button);}
+  for(const [id,label,x,y,w,h,normalImage,pressedImage] of lkjKeyDefs){const button=document.createElement('button');button.type='button';button.dataset.lkjKey=id;button.dataset.normalImage=lkjResource(normalImage);button.dataset.pressedImage=lkjResource(pressedImage);button.setAttribute('aria-label',label);button.style.left=pct(x,800);button.style.top=pct(y,600);button.style.width=pct(w,800);button.style.height=pct(h,600);button.style.backgroundImage=`url("${button.dataset.normalImage}")`;const release=()=>{button.classList.remove('pressed');button.style.backgroundImage=`url("${button.dataset.normalImage}")`;if(id==='up'){clearTimeout(lkjUpHoldTimer);lkjUpHoldTimer=null;}};button.addEventListener('pointerdown',()=>{button.classList.add('pressed');button.style.backgroundImage=`url("${button.dataset.pressedImage}")`;if(id==='up'&&lkjOperational()&&lkjPhase==='done'){clearTimeout(lkjUpHoldTimer);lkjUpHoldTriggered=false;lkjUpHoldTimer=setTimeout(()=>{lkjUpHoldTriggered=true;openLkjNonnormalMenu();},2000);}});button.addEventListener('pointerup',release);button.addEventListener('pointercancel',release);button.addEventListener('pointerleave',release);button.addEventListener('click',()=>{if(id==='up'&&lkjUpHoldTriggered){lkjUpHoldTriggered=false;return;}handleLkjKey(id);});keypad.append(button);}
   document.body.append(root);lkjRoot=root;renderLkj();
 }
 function playLkjKey(){try{lkjKeyAudio.currentTime=0;lkjKeyAudio.play().catch(()=>{});}catch{}}
@@ -681,7 +698,7 @@ function renderSmoothStartPanel(state){
 }
 function stopHorn(event){if(hornPointerId===null)return;if(event?.pointerId!==undefined&&event.pointerId!==hornPointerId)return;hornPointerId=null;hornAudio.pause();hornAudio.currentTime=0;if(sim.state.hornActive)command('horn-stop');elements.hornButton?.classList.remove('pressed');}
 function buildKeys(){if(!debugMode)return;document.body.classList.add('debug-mode');const root=$('#keys');keys.forEach(([id,name])=>{const b=document.createElement('button');b.dataset.id=id;b.textContent=name;b.addEventListener('click',()=>command(id));root.append(b);});}
-function setView(view){closeDevicePanels();selectedView=view;const cab=$('#cab');cab.src=`./assets/archive-cabview/${views[view]||views.front}`;cab.classList.toggle('side-view',view!=='front');cab.classList.toggle('rear-view',view==='rearLeft'||view==='rearRight');routeScene.setView(view);document.querySelectorAll('[data-view]').forEach(b=>b.classList.toggle('active',b.dataset.view===view));if(view==='front')createFront();else{overlay.replaceChildren();if(view==='rearLeft'||view==='rearRight'){const status=document.createElement('section');status.className='rear-lookout-status';status.dataset.rearLookoutStatus='';status.innerHTML='<b>后部瞭望</b><span>车列移动确认 0/12辆 · 持续观察</span><small>窗口外显示本务机车后方车列，车辆按车钩力传播依次起动</small>';overlay.append(status);}}render(sim.state);}
+function setView(view){closeDevicePanels();selectedView=view;const rear=view==='rearLeft'||view==='rearRight';const cab=$('#cab');const stage=$('#stage');cab.src=`./assets/archive-cabview/${views[view]||views.front}`;cab.classList.toggle('side-view',view!=='front');cab.classList.toggle('rear-view',rear);stage.classList.toggle('rear-lookout-active',rear);routeScene.setView(view);document.querySelectorAll('[data-view]').forEach(b=>b.classList.toggle('active',b.dataset.view===view));if(view==='front')createFront();else{overlay.replaceChildren();if(rear){const status=document.createElement('section');status.className='rear-lookout-status';status.dataset.rearLookoutStatus='';status.innerHTML='<b>后部瞭望</b><span>车列移动确认 0/12辆 · 持续观察</span><small>纯三维视角：观察本务机车后方车列依次起动</small>';overlay.append(status);}}render(sim.state);}
 function setControlDrawer(targetId=null){
   const drawers=['workflow','training'];
   for(const id of drawers){

@@ -52,6 +52,8 @@ export class MstsRouteScene {
     this.signalAspect = 'green';
     this.scenarioId = 'normal';
     this.signalLampVisibility = 1;
+    this.startMotionAt = null;
+    this.lastStartFraction = 0;
     this.departureSignal = null;
     this.neighborSignal = null;
     this.passengerCars = [];
@@ -281,20 +283,38 @@ export class MstsRouteScene {
 
   updatePassengerConsist(startFraction = this.wholeTrainStartFraction ?? 1) {
     if (!this.passengerCars.length) return;
+    const now = performance.now() / 1000;
     const point = new THREE.Vector3();
     const tangent = new THREE.Vector3();
+    const lateral = new THREE.Vector3();
     this.passengerCars.forEach((car) => {
       // 起动初段按车钩力由前向后传播。每辆车达到自己的传播阈值后才开始
       // 跟随机车移动；全列起动后所有车辆恢复正常等距跟随。
       const count = Math.max(1, car.userData.consistCount || this.passengerCars.length);
       const index = car.userData.consistIndex || 0;
       const movementRatio = THREE.MathUtils.clamp(startFraction * count - index, 0, 1);
+      const previousRatio = car.userData.lastMovementRatio || 0;
+      if (movementRatio > 0.025 && previousRatio <= 0.025) car.userData.startPulseAt = now;
+      if (movementRatio <= 0.001 && previousRatio > 0.001) car.userData.startPulseAt = null;
+      car.userData.lastMovementRatio = movementRatio;
+      const pulseAge = car.userData.startPulseAt == null ? 99 : Math.max(0, now - car.userData.startPulseAt);
+      const pulse = Math.exp(-2.45 * pulseAge);
+      // 车钩间隙被拉紧后产生一次很轻的纵向顿动，并伴随客车车体的微小横摇。
+      // 使用确定性的阻尼正弦，不使用随机抖动，避免课堂画面像渲染故障。
+      const longitudinalSlack = Math.sin(pulseAge * 10.5 + index * 0.18) * 0.045 * pulse;
+      const lateralSway = Math.sin(pulseAge * 6.4 + index * 0.52) * 0.022 * pulse;
       const routeDistance = this.startOffset + this.distance * movementRatio;
-      const carDistance = routeDistance - car.userData.trainOffset;
+      const carDistance = routeDistance - car.userData.trainOffset + longitudinalSlack;
       this.getExtendedPathPosition(carDistance, point);
       this.getExtendedPathTangent(carDistance, tangent);
       car.position.copy(point);
-      car.rotation.set(0, Math.atan2(tangent.x, tangent.z), 0);
+      lateral.set(tangent.z, 0, -tangent.x);
+      car.position.addScaledVector(lateral, lateralSway);
+      car.rotation.set(
+        Math.sin(pulseAge * 7.2 + index * 0.28) * 0.0024 * pulse,
+        Math.atan2(tangent.x, tangent.z),
+        Math.sin(pulseAge * 6.4 + index * 0.52) * 0.0042 * pulse,
+      );
     });
   }
 
@@ -745,6 +765,9 @@ export class MstsRouteScene {
     this.distance = Math.max(0, Number(distance) || 0);
     this.speed = Math.max(0, Number(speed) || 0);
     this.wholeTrainStartFraction = THREE.MathUtils.clamp(Number(wholeTrainStartFraction) || 0, 0, 1);
+    if (this.wholeTrainStartFraction > 0.018 && this.lastStartFraction <= 0.018) this.startMotionAt = performance.now() / 1000;
+    if (this.wholeTrainStartFraction <= 0.001 && this.lastStartFraction > 0.001) this.startMotionAt = null;
+    this.lastStartFraction = this.wholeTrainStartFraction;
     this.view = view;
     this.canvas.classList.toggle('live', this.ready && (this.distance > 0.2 || view !== 'front' || signalVisible));
     this.updateAtmosphere();
@@ -766,20 +789,27 @@ export class MstsRouteScene {
       front: 0,
       left: THREE.MathUtils.degToRad(65),
       right: THREE.MathUtils.degToRad(-65),
-      rearLeft: THREE.MathUtils.degToRad(165),
-      rearRight: THREE.MathUtils.degToRad(-165),
+      rearLeft: THREE.MathUtils.degToRad(157),
+      rearRight: THREE.MathUtils.degToRad(-157),
     };
     const pitchOffsets = { front: -0.22, left: -0.035, right: -0.035, rearLeft: -0.04, rearRight: -0.04 };
-    const lateralOffsets = { front: 0, left: -0.7, right: 0.7, rearLeft: -3.2, rearRight: 3.2 };
-    const longitudinalOffsets = { front: 0, left: 0, right: 0, rearLeft: -1.8, rearRight: -1.8 };
+    const lateralOffsets = { front: 0, left: -0.7, right: 0.7, rearLeft: -2.15, rearRight: 2.15 };
+    const longitudinalOffsets = { front: 0, left: 0, right: 0, rearLeft: -5.0, rearRight: -5.0 };
     const right = new THREE.Vector3(this.forward.z, 0, -this.forward.x);
     this.camera.position.copy(position);
     this.camera.position.addScaledVector(right, lateralOffsets[this.view] || 0);
     this.camera.position.addScaledVector(this.forward, longitudinalOffsets[this.view] || 0);
     this.camera.position.y += this.eyeHeight;
+    const pulseAge = this.startMotionAt == null ? 99 : Math.max(0, performance.now() / 1000 - this.startMotionAt);
+    const lowSpeedFactor = 1 - THREE.MathUtils.clamp(this.speed / 15, 0, 1);
+    const cabPulse = Math.exp(-2.15 * pulseAge) * lowSpeedFactor;
+    this.camera.position.addScaledVector(this.forward, Math.sin(pulseAge * 9.2) * 0.024 * cabPulse);
+    this.camera.position.y += Math.sin(pulseAge * 7.1 + 0.4) * 0.012 * cabPulse;
     if (this.ground) this.ground.position.set(position.x, position.y - 0.18, position.z);
     this.camera.rotation.order = 'YXZ';
-    this.camera.rotation.set(pitchOffsets[this.view] ?? pitchOffsets.front, baseYaw + (yawOffsets[this.view] || 0), 0);
+    const pitchSway = Math.sin(pulseAge * 7.1) * 0.0028 * cabPulse;
+    const rollSway = Math.sin(pulseAge * 5.8 + 0.7) * 0.0022 * cabPulse;
+    this.camera.rotation.set((pitchOffsets[this.view] ?? pitchOffsets.front) + pitchSway, baseYaw + (yawOffsets[this.view] || 0), rollSway);
   }
 
   resize() {
