@@ -34,6 +34,8 @@ for (const state of nativeStates) {
 assert.match(interfaceSource, /native-states\/main-blank\.png/);
 assert.match(interfaceSource, /lkj-native-equipment/);
 assert.match(interfaceSource, /lkjControlLimit/);
+assert.match(interfaceSource, /lkj-parameter-form/);
+assert.doesNotMatch(interfaceSource, /设备自检正常/);
 assert.doesNotMatch(interfaceSource, /button\.style\.backgroundImage/);
 assert.match(interfaceSource, /rear-lookout-active/);
 assert.match(styles, /\.stage\.rear-lookout-active \.cab-layer\{display:none\}/);

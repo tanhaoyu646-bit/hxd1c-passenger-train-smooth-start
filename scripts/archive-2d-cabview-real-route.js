@@ -1,8 +1,8 @@
-import { TrainSimulation } from './dynamics.js?rev=smooth-start-v16-native-lkj';
-import { PROCEDURE, procedureState, scoreRun } from './procedure.js?rev=smooth-start-v16-native-lkj';
-import { MstsRouteScene } from './mstsRouteScene.js?rev=smooth-start-v16-native-lkj';
-import { LKJ_FIELD_DEFINITIONS, RUNNING_NOTICES, SIGNAL_ASPECTS, TRAIN_DYNAMICS } from './scenario.js?rev=smooth-start-v16-native-lkj';
-import { SCENARIOS, ROUTE_CONTEXT, getScenario, scenarioAudioPath } from './credentialScenario.js?rev=smooth-start-v16-native-lkj';
+import { TrainSimulation } from './dynamics.js?rev=smooth-start-v18-parameter-ratio';
+import { PROCEDURE, procedureState, scoreRun } from './procedure.js?rev=smooth-start-v18-parameter-ratio';
+import { MstsRouteScene } from './mstsRouteScene.js?rev=smooth-start-v18-parameter-ratio';
+import { LKJ_FIELD_DEFINITIONS, LKJ_TRAINING_PARAMETERS, RUNNING_NOTICES, SIGNAL_ASPECTS, TRAIN_DYNAMICS } from './scenario.js?rev=smooth-start-v18-parameter-ratio';
+import { SCENARIOS, ROUTE_CONTEXT, getScenario, scenarioAudioPath } from './credentialScenario.js?rev=smooth-start-v18-parameter-ratio';
 
 const $ = (q) => document.querySelector(q);
 const sim = new TrainSimulation();
@@ -275,11 +275,11 @@ function handleLkjKey(id){
   }
   if(lkjOperational()&&lkjPhase==='done'){
     if(id==='query'){lkjQueryIndex=0;lkjPhase='query-menu';renderLkj();return;}
-    if(id==='setting'){lkjDraft={...(sim.state.lkjData||{})};lkjFieldIndex=0;lkjReviewOrigin='edit';lkjPhase='edit';renderLkj();return;}
+    if(id==='setting'){lkjDraft={...LKJ_TRAINING_PARAMETERS,...(sim.state.lkjData||{})};lkjFieldIndex=0;lkjReviewOrigin='edit';lkjPhase='edit';renderLkj();return;}
     flashLkj('监控状态：按【查询】查看信息，按【设定】修改参数。');return;
   }
   if(lkjPhase==='boot'){
-    if(id==='setting'){lkjPhase='edit';lkjFieldIndex=0;lkjReviewOrigin='edit';renderLkj();return;}
+    if(id==='setting'){lkjDraft={...LKJ_TRAINING_PARAMETERS,...lkjDraft};lkjPhase='edit';lkjFieldIndex=0;lkjReviewOrigin='edit';renderLkj();return;}
     if(id==='query'){lkjQueryIndex=0;lkjPhase='query-menu';renderLkj();return;}
     flashLkj('按【设定】进入参数设定，按【查询】查看查询选择');return;
   }
@@ -329,14 +329,34 @@ function lkjCabAspect(state=sim.state,scenario=getScenario(state.scenarioId)){
   return state.signalAspect==='greenYellow'?'green-yellow':state.signalAspect;
 }
 function lkjNativeTop(state=sim.state){
-  const scenario=getScenario(state.scenarioId);const limit=lkjActiveLimit(state,scenario);const remaining=Math.max(0,Math.round(ROUTE_CONTEXT.departureSignalDistance-state.distance));
-  return `<div class="lkj-native-aspect ${lkjCabAspect(state,scenario)}" aria-label="机车信号"></div><b class="lkj-native-speed">${Math.round(state.speed)}</b><b class="lkj-native-limit">${limit}</b><b class="lkj-native-distance">${remaining}</b><b class="lkj-native-station">${state.signalPassed?'通过':'出站'}　${state.signalPassed?'6133':'6119'}</b><b class="lkj-native-km">${(611.864+state.distance/1000).toFixed(3)}</b><time class="lkj-native-time">${new Date().toLocaleTimeString('zh-CN',{hour12:false})}</time>`;
+  const scenario=getScenario(state.scenarioId);const unset=!state.lkjAttempted&&!state.lkjConfirmed;const limit=unset?0:lkjActiveLimit(state,scenario);const remaining=unset?0:Math.max(0,Math.round(ROUTE_CONTEXT.departureSignalDistance-state.distance));
+  return `<div class="lkj-native-aspect ${lkjCabAspect(state,scenario)}" aria-label="机车信号"></div><b class="lkj-native-speed">${Math.round(state.speed)}</b><b class="lkj-native-limit">${limit}</b><b class="lkj-native-distance">${remaining}</b><b class="lkj-native-station">${unset?'':`${state.signalPassed?'通过':'出站'}　${state.signalPassed?'6133':'6119'}`}</b><b class="lkj-native-km">${unset?'0.000':(611.864+state.distance/1000).toFixed(3)}</b><time class="lkj-native-time">${new Date().toLocaleTimeString('zh-CN',{hour12:false})}</time>`;
 }
 function lkjFrame(body='',frame='main-blank.png'){
   return `<img class="lkj-native-state-frame" src="./assets/lkj/native-states/${frame}" alt=""><div class="lkj-native-overlay">${body}</div>`;
 }
 function lkjView(body,title='LKJ2000监控装置'){
   return lkjFrame(`${lkjNativeTop()}<section class="lkj-native-dialog"><header>${title}</header>${body}</section>`);
+}
+const LKJ_PARAMETER_COLUMNS=[
+  [['driverId','司机号'],['assistantId','副司机号'],['section','区段号'],['station','车站号'],['trainNo','车次编号'],['trainType','列车种类']],
+  [['weight','总重'],['cars','辆数'],['length','计长'],['speedLevel','车速等级'],['locomotiveCount','机车台数']],
+  [['stationYard','站场号'],['track','股道号'],['runDirection','运行方向'],['endStation','终到站'],['runPath','运行径路']],
+];
+function lkjParameterValue(key,value=''){
+  if(!value)return '_';
+  if(key==='trainNo')return `K${value}`;
+  if(key==='station')return `${value} 株洲`;
+  if(key==='trainType')return value==='1'?'客车':value;
+  if(key==='speedLevel')return `客2(${value}km/h)`;
+  if(key==='runDirection')return value==='2'?'七斗冲':value;
+  return value;
+}
+function lkjParameterView(review=false){
+  const activeKey=lkjFields[lkjFieldIndex]?.[0];
+  const columns=LKJ_PARAMETER_COLUMNS.map((column)=>`<div class="lkj-param-column">${column.map(([key,label])=>`<label class="${!review&&key===activeKey?'selected':''}"><span>${label}</span><b>${lkjParameterValue(key,lkjDraft[key])}</b></label>`).join('')}</div>`).join('');
+  const footer=review?'<span>参数核对</span><b>【←】返回修改　【确认】保存并进入揭示核对</b>':'<span>4各速度</span><span>3系统</span><span>2时间</span><span>1检修</span><span class="cancel">0取消</span><b>确定</b>';
+  return lkjFrame(`${lkjNativeTop()}<section class="lkj-parameter-form"><header>参数设定</header><div class="lkj-param-columns">${columns}</div><footer>${footer}</footer>${lkjNotice?`<p>${lkjNotice}</p>`:''}</section>`);
 }
 function lkjSpeedTracePoints(){
   if(!lkjSpeedTrace.length)return '';
@@ -383,11 +403,11 @@ function renderLkj(){
     screen.innerHTML=lkjMonitorView();screen.dataset.monitorStatus=status;screen.dataset.monitorDetail=detail;return;
   }
   if(lkjPhase==='done'&&sim.state.lkjAttempted){screen.innerHTML=lkjView(`<p>本次输入存在 ${sim.state.lkjErrors.length} 项不一致</p><strong>考评已记录，允许继续后续作业</strong><span class="lkj-help">本项将在成绩单中按实际正确性计分；按【查询】可重新输入。</span>`,'参数核对记录');return;}
-  if(lkjPhase==='boot'){screen.innerHTML=lkjView('<p>设备自检正常</p><strong>按【设定】进入参数设定</strong><span class="lkj-help">【查询】进入查询选择；使用显示器下方实体键操作</span>','LKJ2000');return;}
+  if(lkjPhase==='boot'){screen.innerHTML=lkjFrame(lkjNativeTop());return;}
   if(lkjPhase==='edit'){
-    const [key,label,target]=lkjFields[lkjFieldIndex];const value=lkjDraft[key]||'';screen.innerHTML=lkjView(`<p>${label}</p><strong class="lkj-input">${value||'_'}</strong><span class="lkj-help">训练值：${target}<br>数字键输入　【←】删除　【↑↓】换项　【确认】保存本项${lkjNotice?`<br>${lkjNotice}`:''}</span>`,`参数输入 ${lkjFieldIndex+1}/${lkjFields.length}`);return;
+    screen.innerHTML=lkjParameterView(false);return;
   }
-  if(lkjPhase==='review'){screen.innerHTML=lkjView(`<div class="lkj-review">${lkjFields.map(([key,label])=>`<span>${label}</span><strong>${lkjDraft[key]||'—'}</strong>`).join('')}</div><span class="lkj-help">${lkjReviewOrigin==='query'?'查询只读　【确认】返回':'【←】返回修改　【确认】保存并进入揭示核对'}${lkjNotice?`<br>${lkjNotice}`:''}</span>`,'参数核对');return;}
+  if(lkjPhase==='review'){screen.innerHTML=lkjReviewOrigin==='query'?lkjView(`<div class="lkj-review">${lkjFields.map(([key,label])=>`<span>${label}</span><strong>${lkjDraft[key]||'—'}</strong>`).join('')}</div><span class="lkj-help">查询只读　【确认】返回</span>`,'参数核对'):lkjParameterView(true);return;}
   const last=lkjNoticeIndex===RUNNING_NOTICES.length-1;
   screen.innerHTML=lkjView(`<table class="lkj-reveal-table"><thead><tr><th>序号</th><th>运行揭示内容</th></tr></thead><tbody>${RUNNING_NOTICES.map((notice,index)=>`<tr class="${index===lkjNoticeIndex?'selected':''}"><td>${index+1}</td><td>${notice}</td></tr>`).join('')}</tbody></table><strong>${last?(lkjReviewOrigin==='query'?'按【确认】返回查询选择':'按【确认】完成核对并投入监控'):'按【确认】查看下一条揭示'}</strong><span class="lkj-help">【↑↓】选择　【缓解】返回${lkjNotice?`<br>${lkjNotice}`:''}</span>`,lkjQueryScope==='current'?'当前揭示查询':'全部揭示信息查询');
 }
