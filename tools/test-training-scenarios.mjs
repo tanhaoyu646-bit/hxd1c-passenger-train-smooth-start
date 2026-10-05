@@ -162,9 +162,11 @@ mismatch.command('traction', 1);
 for (let index = 0; index < 12000 && mismatch.state.credentialStage !== 'confirm-ground-signal'; index += 1) mismatch.tick(0.05);
 assert.equal(mismatch.command('signal-answer', 'red'), false);
 assert.equal(mismatch.state.signalMismatch, true);
-assert.equal(mismatch.state.authority, false);
-assert.equal(mismatch.state.traction, 0);
-assert.equal(mismatch.state.autoBrake, 5);
+assert.equal(mismatch.state.authority, true, '信号核对错误应扣分提示，但不由系统撤销既有发车授权或强切牵引');
+assert.equal(mismatch.state.traction, 1, '信号不一致只提示司机处置，不替学生自动切除牵引');
+assert.equal(mismatch.state.autoBrake, 0, '信号不一致只提示司机处置，不替学生自动投入制动');
+assert.equal(mismatch.command('signal-answer', 'green'), true);
+assert.equal(mismatch.state.signalMismatch, false, '重新正确确认后应解除不一致记录');
 
 const assessmentMismatch = prepare('weather', 'assessment');
 assessmentMismatch.command('order-sign');
@@ -175,9 +177,10 @@ assessmentMismatch.command('direction', 'F');
 assessmentMismatch.command('traction', 1);
 for (let index = 0; index < 12000 && assessmentMismatch.state.credentialStage !== 'confirm-ground-signal'; index += 1) assessmentMismatch.tick(0.05);
 assert.equal(assessmentMismatch.command('signal-answer', 'red'), false);
-assert.equal(assessmentMismatch.state.signalMismatch, true, '考评模式信号不一致仍须强制停车');
-assert.equal(assessmentMismatch.state.traction, 0);
-assert.equal(assessmentMismatch.state.autoBrake, 5);
+assert.equal(assessmentMismatch.state.signalMismatch, true, '考评模式应记录信号不一致，由学生完成减速或停车处置');
+assert.equal(assessmentMismatch.state.authority, true);
+assert.equal(assessmentMismatch.state.traction, 1);
+assert.equal(assessmentMismatch.state.autoBrake, 0);
 
 assert.equal(LKJ_FIELD_DEFINITIONS.length, 16, 'LKJ参数设定应覆盖本任务所需16项字段');
 assert.equal(TRAIN_DYNAMICS.totalMassKg, 850000);
@@ -199,4 +202,4 @@ for (let index = 0; index < 600; index += 1) specialty.tick(0.05, 'rearLeft');
 assert(specialty.state.distance > 0, '专项训练应能实际起动列车');
 
 assert.equal(PROCEDURE.reduce((sum, [, , weight]) => sum + weight, 0), 100);
-console.log('Training scenarios valid: four scenarios, expanded LKJ data, specialty preset, 60/45 unlock, assessment soft gates, and hard mismatch stop passed.');
+console.log('Training scenarios valid: four scenarios, expanded LKJ data, 60/45 unlock, assessment soft gates, and driver-handled signal mismatch passed.');

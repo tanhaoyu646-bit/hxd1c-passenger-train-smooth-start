@@ -158,7 +158,9 @@ export class TrainSimulation {
     } else if (scenario.id === 'weather') {
       s.credentialConfirmed = Boolean(s.orderSigned && s.locomotiveSignalObserved && s.weatherReportSent && s.departureNoticeReceived);
       s.credentialCorrect = Boolean(s.credentialConfirmed && !s.signalMismatch);
-      s.authority = Boolean(lkjReady && tailReady && s.credentialConfirmed && specialUnlockReady && !s.signalMismatch && (!s.handSignalRequired || s.handSignalConfirmed));
+      // 显示核对错误用于扣分并提示司机主动处置，不由仿真系统替司机切除牵引。
+      // 因此授权状态不再直接绑定 signalMismatch；实际红灯越过仍由既有红灯防护逻辑处理。
+      s.authority = Boolean(lkjReady && tailReady && s.credentialConfirmed && specialUnlockReady && (!s.handSignalRequired || s.handSignalConfirmed));
     } else {
       s.credentialConfirmed = Boolean(s.credentialAttempted && s.departureNoticeReceived);
       s.authority = Boolean(lkjReady && tailReady && s.credentialConfirmed && specialUnlockReady && (s.credentialCorrect || this.isAssessment()) && (!s.handSignalRequired || s.handSignalConfirmed));
@@ -501,11 +503,14 @@ export class TrainSimulation {
       s.signalMeaningCorrect = value === s.signalAspect;
       if (scenario.id === 'weather') {
         if (!s.signalMeaningCorrect) {
-          s.signalMismatch = true; s.authority = false; s.traction = 0; s.autoBrake = 5;
-          this.emit('地面信号与机车信号不一致：已实施立即停车。');
+          // 显示不一致要求司机采取更严格的减速或停车处置，但课堂系统不替学生
+          // 自动切除牵引或投入制动。绿色许可证、路票场景中存在有凭证授权的
+          // 预期差异，更不能把“显示不同”本身作为自动停车条件。
+          s.signalMismatch = true; this.syncAuthority();
+          this.emit('地面信号与机车信号不一致：请立即退牵引并采取减速或停车措施后重新确认。');
           return false;
         }
-        s.limitedStart = false; s.credentialStage = 'continue-after-ground-signal'; this.syncAuthority();
+        s.signalMismatch = false; s.limitedStart = false; s.credentialStage = 'continue-after-ground-signal'; this.syncAuthority();
         this.emit('地面信号与机车信号一致，可继续运行。'); return true;
       }
       this.syncAuthority();

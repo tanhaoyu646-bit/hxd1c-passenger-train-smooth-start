@@ -13,12 +13,33 @@ const interfaceSource = await readFile('scripts/archive-2d-cabview-real-route.js
 const sceneSource = await readFile('scripts/mstsRouteScene.js', 'utf8');
 const styles = await readFile('styles/smooth-start.css', 'utf8');
 
-assert.match(interfaceSource, /lkj-resource-01-63x55\.png/);
-assert.match(interfaceSource, /lkj-resource-31-65x40\.png/);
+const nativeStates = [
+  'main-blank.png',
+  'query-menu.png',
+  'current-reveal.png',
+  'nonnormal-menu.png',
+  'green-permit-input.png',
+  'green-permit-unlock.png',
+  'green-permit-active.png',
+  'green-permit-running.png',
+  'route-ticket-input.png',
+  'route-ticket-unlock.png',
+  'route-ticket-running.png',
+  'parameter-setup.png',
+];
+for (const state of nativeStates) {
+  await access(`assets/lkj/native-states/${state}`);
+}
+
+assert.match(interfaceSource, /native-states\/main-blank\.png/);
+assert.match(interfaceSource, /lkj-native-equipment/);
+assert.match(interfaceSource, /lkjControlLimit/);
+assert.doesNotMatch(interfaceSource, /button\.style\.backgroundImage/);
 assert.match(interfaceSource, /rear-lookout-active/);
 assert.match(styles, /\.stage\.rear-lookout-active \.cab-layer\{display:none\}/);
+assert.match(styles, /\.lkj-native-base/);
 assert.match(sceneSource, /longitudinalSlack/);
 assert.match(sceneSource, /lateralSway/);
 assert.doesNotMatch(sceneSource, /Math\.random\(\).*Sway/);
 
-console.log('Interface assets valid: 49 original LKJ resources, pure 3D rear views, and deterministic damped start motion.');
+console.log('Interface assets valid: native LKJ states, transparent physical-key hotspots, pure 3D rear views, and deterministic damped start motion.');
