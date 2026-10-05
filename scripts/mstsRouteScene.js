@@ -789,12 +789,12 @@ export class MstsRouteScene {
       front: 0,
       left: THREE.MathUtils.degToRad(65),
       right: THREE.MathUtils.degToRad(-65),
-      rearLeft: THREE.MathUtils.degToRad(157),
-      rearRight: THREE.MathUtils.degToRad(-157),
+      rearLeft: THREE.MathUtils.degToRad(165),
+      rearRight: THREE.MathUtils.degToRad(-165),
     };
     const pitchOffsets = { front: -0.22, left: -0.035, right: -0.035, rearLeft: -0.04, rearRight: -0.04 };
-    const lateralOffsets = { front: 0, left: -0.7, right: 0.7, rearLeft: -2.15, rearRight: 2.15 };
-    const longitudinalOffsets = { front: 0, left: 0, right: 0, rearLeft: -5.0, rearRight: -5.0 };
+    const lateralOffsets = { front: 0, left: -0.7, right: 0.7, rearLeft: -3.2, rearRight: 3.2 };
+    const longitudinalOffsets = { front: 0, left: 0, right: 0, rearLeft: -1.8, rearRight: -1.8 };
     const right = new THREE.Vector3(this.forward.z, 0, -this.forward.x);
     this.camera.position.copy(position);
     this.camera.position.addScaledVector(right, lateralOffsets[this.view] || 0);

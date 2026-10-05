@@ -36,6 +36,7 @@ export class TrainSimulation {
       signalMeaningCorrect: false, handSignalRequired: true, handSignalConfirmed: false,
       scenarioId: 'normal', scenarioSelected: false, credentialStage: 'select',
       radioContacted: false, radioResponseAttempted: false, radioResponseCorrect: false,
+      departureResponseAttempted: false, departureResponseCorrect: false,
       orderSigned: false, credentialPresented: false,
       credentialAttempted: false, credentialCorrect: false, credentialConfirmed: false,
       directionObserved: false, directionCorrect: false, locomotiveSignalObserved: false,
@@ -117,13 +118,14 @@ export class TrainSimulation {
       [4, s.brakeTested, '未完成简略制动机试验即动车'],
       [5, s.releaseObserved, '未确认制动缓解即动车'],
       [7, (s.scenarioId === 'weather' ? s.locomotiveSignalObserved : s.signalObserved && s.locomotiveSignalObserved), '未按场景完成地面信号和机车信号确认即动车'],
-      [8, s.headlight && s.horn, '未开启前照灯或未鸣笛即动车'],
-      [9, s.direction === 'F', '换向手柄未置前进位即动车'],
-      [10, !s.parkingBrake && s.autoBrake === 0 && s.independentBrake === 0 && s.brakeCyl < TRACTION_BRAKE_CYL_MAX, '起动前制动状态未完全缓解'],
+      [8, s.departureNoticeReceived && (!s.handSignalRequired || s.handSignalConfirmed), '未完成发车联控或未确认发车手信号即动车'],
+      [9, s.headlight && s.horn, '未开启前照灯或未鸣笛即动车'],
+      [10, s.direction === 'F', '换向手柄未置前进位即动车'],
+      [11, !s.parkingBrake && s.autoBrake === 0 && s.independentBrake === 0 && s.brakeCyl < TRACTION_BRAKE_CYL_MAX, '起动前制动状态未完全缓解'],
     ];
     for (const [index, correct, reason] of checks) if (!correct) this.lockAssessmentScore(index, reason);
     if (!s.credentialCorrect) this.lockAssessmentCredential('credential', `${scenario.label}行车凭证未正确确认即动车`);
-    if (!s.departureNoticeReceived && scenario.id !== 'normal') this.lockAssessmentCredential('notice', '未接收发车通知即动车');
+    if (!s.departureNoticeReceived) this.lockAssessmentCredential('notice', '未接收第二次发车联控即动车');
     if (!s.tailPressureQueried) this.lockAssessmentCredential('tail', '未通过CIR查询列尾风压即动车');
     if (s.handSignalRequired && !s.handSignalConfirmed) this.lockAssessmentCredential('handSignal', '未确认发车手信号即动车');
     if (s.lkjUnlockRequired && !s.lkjUnlockMethodCorrect) this.lockAssessmentCredential('method', '未正确选择LKJ非正常行车方式即动车');
@@ -152,8 +154,8 @@ export class TrainSimulation {
     const specialUnlockReady = !s.lkjUnlockRequired || s.lkjUnlockCorrect || (this.isAssessment() && s.lkjUnlockAttempted);
     const tailReady = s.tailPressureQueried || this.isAssessment();
     if (scenario.id === 'normal') {
-      s.credentialConfirmed = Boolean(s.radioContacted && s.signalObserved && s.directionObserved);
-      s.credentialCorrect = Boolean(s.radioContacted && s.radioResponseCorrect && s.signalMeaningCorrect && s.directionCorrect);
+      s.credentialConfirmed = Boolean(s.radioContacted && s.signalObserved && s.locomotiveSignalObserved && s.departureNoticeReceived);
+      s.credentialCorrect = Boolean(s.credentialConfirmed && s.radioResponseCorrect && s.signalMeaningCorrect && s.departureResponseCorrect);
       s.authority = Boolean(lkjReady && tailReady && s.credentialConfirmed && specialUnlockReady && (s.credentialCorrect || this.isAssessment()) && (!s.handSignalRequired || s.handSignalConfirmed));
     } else if (scenario.id === 'weather') {
       s.credentialConfirmed = Boolean(s.orderSigned && s.locomotiveSignalObserved && s.weatherReportSent && s.departureNoticeReceived);
@@ -197,6 +199,8 @@ export class TrainSimulation {
     s.radioContacted = true;
     s.radioResponseAttempted = true;
     s.radioResponseCorrect = true;
+    s.departureResponseAttempted = true;
+    s.departureResponseCorrect = true;
     s.orderSigned = true;
     s.credentialPresented = Boolean(scenario.documentTitle);
     s.credentialAttempted = true;
@@ -208,7 +212,7 @@ export class TrainSimulation {
     s.signalMeaningCorrect = scenario.id !== 'weather';
     s.locomotiveSignalObserved = true;
     s.weatherReportSent = scenario.id === 'weather';
-    s.departureNoticeReceived = scenario.id !== 'normal';
+    s.departureNoticeReceived = true;
     s.limitedStart = scenario.id === 'weather';
     s.credentialStage = scenario.id === 'weather' ? 'limited-start' : 'ready';
     s.handSignalConfirmed = true;
@@ -259,7 +263,8 @@ export class TrainSimulation {
       s.scenarioSelected = true;
       s.signalAspect = scenario.signalAspect;
       s.signalObserved = false; s.signalAnswer = null; s.signalMeaningCorrect = false;
-      s.credentialStage = 'prepare'; s.radioContacted = false; s.radioResponseAttempted = false; s.radioResponseCorrect = false; s.orderSigned = false;
+      s.credentialStage = 'prepare'; s.radioContacted = false; s.radioResponseAttempted = false; s.radioResponseCorrect = false;
+      s.departureResponseAttempted = false; s.departureResponseCorrect = false; s.orderSigned = false;
       s.credentialPresented = false; s.credentialAttempted = false; s.credentialCorrect = false;
       s.directionObserved = false; s.directionCorrect = false; s.locomotiveSignalObserved = false;
       s.weatherReportSent = false; s.departureNoticeReceived = false; s.limitedStart = false;
@@ -321,14 +326,18 @@ export class TrainSimulation {
       if (!s.scenarioSelected) return this.reject('请先选择训练场景。');
       const scenario = getScenario(s.scenarioId);
       if (scenario.id === 'weather' || scenario.id === 'routeTicket') return this.reject('本场景应先确认调度命令。');
+      if (scenario.id === 'normal' && !(s.brakeTested && s.releaseObserved)) {
+        if (!this.isAssessment()) return this.reject('简略制动机试验及缓解尚未完成，车站首次来电尚未进入可接听状态。');
+        this.lockAssessmentCredential('signalReadyCall', '未完成简略制动机试验即办理首次车机联控');
+      }
       const correct = value !== false;
       s.radioResponseAttempted = true;
       if (!correct && !this.isAssessment()) return this.reject('联控复诵内容不正确，请根据车站值班员来话重新应答。');
       s.radioContacted = true;
       s.radioResponseCorrect = correct;
       if (!correct) this.lockAssessmentCredential('credential', '车机联控复诵错误');
-      s.credentialStage = scenario.id === 'normal' ? 'observe-signal' : 'check-credential';
-      this.emit(correct ? '车站联控复诵完成。请继续按当前场景确认。' : '车机联控复诵错误已记录；考评流程继续。');
+      s.credentialStage = scenario.id === 'normal' ? 'observe-ground-signal' : 'check-credential';
+      this.emit(correct ? '已规范复诵：“K2026次出站信号好了，司机明白。”请确认地面出站信号。' : '首次车机联控复诵错误已记录；考评流程继续。');
       return true;
     }
     if (id === 'order-sign') {
@@ -342,6 +351,10 @@ export class TrainSimulation {
     if (id === 'locomotive-signal-answer') {
       if (!s.scenarioSelected) return this.reject('请先选择训练场景。');
       if (s.scenarioId === 'weather' && !s.orderSigned) return this.reject('请先在CIR签收天气恶劣行车调度命令。');
+      if (s.scenarioId === 'normal' && !s.signalMeaningCorrect) {
+        if (!this.isAssessment()) return this.reject('请先确认地面出站信号，再确认机车信号。');
+        this.lockAssessmentScore(7, '未确认地面信号即确认机车信号');
+      }
       const expected = s.scenarioId === 'weather' ? 'green' : s.signalAspect;
       s.locomotiveSignalObserved = value === expected;
       if (!s.locomotiveSignalObserved) return this.reject(`机车信号显示确认不正确，当前应为${SIGNAL_ASPECTS[expected]?.label || '规定显示'}。`);
@@ -349,7 +362,8 @@ export class TrainSimulation {
         s.credentialStage = 'report-ground-unavailable';
         this.emit('已在驾驶台直接确认机车信号绿灯。请通过CIR报告地面出站信号无法辨认。');
       } else {
-        this.emit(`已在驾驶台直接确认机车信号${SIGNAL_ASPECTS[expected]?.label || ''}。`);
+        if(s.scenarioId==='normal')s.credentialStage='await-departure-call';
+        this.emit(`已在驾驶台直接确认机车信号${SIGNAL_ASPECTS[expected]?.label || ''}。${s.scenarioId==='normal'?'请在CIR接听第二次车站来电。':''}`);
       }
       return true;
     }
@@ -443,10 +457,23 @@ export class TrainSimulation {
     }
     if (id === 'departure-notice') {
       const scenario = getScenario(s.scenarioId);
+      const correct=value!==false;
+      if(scenario.id==='normal'){
+        s.departureResponseAttempted=true;
+        if(!(s.signalMeaningCorrect&&s.locomotiveSignalObserved)){
+          if(!this.isAssessment())return this.reject('请先依次确认地面出站信号和机车信号。');
+          this.lockAssessmentCredential('departureCall','未确认地面及机车信号即办理第二次发车联控');
+        }
+        if(!correct&&!this.isAssessment())return this.reject('发车联控复诵内容不正确，请重新接听并规范复诵。');
+        s.departureNoticeReceived=true;s.departureResponseCorrect=correct;s.directionObserved=true;s.directionCorrect=correct;s.credentialStage='ready-hand-signal';this.syncAuthority();
+        this.emit(correct?'已规范复诵：“K2026次3道发车，司机明白。”请确认发车手信号。':'第二次发车联控复诵错误已记录；考评流程继续。');return true;
+      }
       if (!['greenPermit', 'routeTicket'].includes(scenario.id) || !s.credentialAttempted) return this.reject('请先完成行车凭证核对。');
       if (s.lkjUnlockRequired && !s.lkjUnlockCorrect && !this.isAssessment()) return this.reject('请先完成LKJ非正常行车解锁。');
-      s.departureNoticeReceived = true; s.credentialStage = 'ready-depart'; this.syncAuthority();
-      this.emit('已收到发车通知；联控应答完成，具备发车条件。'); return true;
+      s.departureResponseAttempted=true;s.departureResponseCorrect=correct;
+      if(!correct&&!this.isAssessment())return this.reject('发车通知复诵不正确，请重新接听并规范复诵。');
+      s.departureNoticeReceived=true;s.credentialStage='ready-depart';this.syncAuthority();
+      this.emit(correct?'已收到发车通知；联控应答完成。请确认发车手信号。':'发车通知复诵错误已记录；考评流程继续。'); return true;
     }
     if (id === 'direction-answer') {
       if (s.scenarioId !== 'normal' || !s.radioContacted || !s.signalMeaningCorrect) return this.reject('请先完成车站联控和出站信号确认。');
@@ -522,7 +549,7 @@ export class TrainSimulation {
         return this.reject('信号显示或含义确认不正确，请重新观察出站信号机。');
       }
       if (s.signalAspect === 'red') return this.emit('已正确确认红灯：不得凭地面信号越过，请继续按本场景确认行车凭证。'), true;
-      this.emit(`已正确确认${SIGNAL_ASPECTS[s.signalAspect].label}。请继续确认运行方向。`); return true;
+      this.emit(`已正确确认${SIGNAL_ASPECTS[s.signalAspect].label}。${scenario.id === 'normal' ? '请继续确认机车信号。' : '请继续按场景流程操作。'}`); return true;
     }
     if (id === 'hand-signal-confirm') {
       if (!s.credentialConfirmed && !this.isAssessment()) return this.reject('请先完成本场景行车凭证和开车通知确认。');

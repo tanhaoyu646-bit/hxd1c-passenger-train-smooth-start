@@ -9,11 +9,18 @@ const departureBrakesReady = (s) => !s.parkingBrake
   && s.independentBrake === 0
   && s.brakeCyl < 15;
 
-const credentialWorkflowReady = (s) => (s.tailPressureQueried || s.trainingMode === 'assessment')
-  && s.credentialConfirmed
-  && (!s.lkjUnlockRequired || s.lkjUnlockCorrect || (s.trainingMode === 'assessment' && s.lkjUnlockAttempted))
+const preDepartureCommunicationReady = (s) => {
+  const tailReady = s.tailPressureQueried || s.trainingMode === 'assessment';
+  if (s.scenarioId === 'normal') return tailReady && s.radioContacted;
+  if (s.scenarioId === 'weather') return tailReady && s.orderSigned;
+  const firstContactReady = s.scenarioId === 'greenPermit' ? s.radioContacted : s.orderSigned;
+  const unlockReady = !s.lkjUnlockRequired || s.lkjUnlockCorrect || (s.trainingMode === 'assessment' && s.lkjUnlockAttempted);
+  return tailReady && firstContactReady && s.credentialAttempted && unlockReady;
+};
+
+const departureAuthorizationReady = (s) => s.departureNoticeReceived
   && (!s.handSignalRequired || s.handSignalConfirmed)
-  && (s.credentialCorrect || s.trainingMode === 'assessment');
+  && (s.trainingMode === 'assessment' || s.scenarioId === 'weather' || s.departureResponseCorrect);
 
 export const PROCEDURE = [
   ['选择K2026次训练场景', s => s.scenarioSelected, 2],
@@ -22,8 +29,9 @@ export const PROCEDURE = [
   ['升受电弓、闭合主断并建立总风', s => s.panto && s.netVoltage >= 22.5 && s.mainBreaker && s.compressor && s.mainRes >= 750, 5],
   ['简略制动机试验：减压并确认制动', s => s.brakeTested, 4],
   ['大闸回运转位并确认列车缓解', s => s.releaseObserved, 4],
-  ['查询列尾风压并完成行车凭证、发车通知和手信号', credentialWorkflowReady, 10],
+  ['查询列尾风压并完成发车前首次联控', preDepartureCommunicationReady, 6],
   ['按场景确认地面信号和机车信号', scenarioSignalReady, 4],
+  ['接听发车联控并确认发车手信号', departureAuthorizationReady, 4],
   ['开启前照灯并鸣笛', s => s.headlight && s.horn, 3],
   ['方向手柄置前进位', s => s.direction === 'F', 3],
   ['确认大小闸缓解并缓解停放制动', departureBrakesReady, 5],
@@ -42,29 +50,38 @@ export function procedureState(state) {
   const current = complete.findIndex((done) => !done);
   return { complete, current: current < 0 ? PROCEDURE.length - 1 : current, done: complete.every(Boolean) };
 }
-function credentialStepEarned(state) {
+function preDepartureStepEarned(state) {
   const locked = new Set(state.assessmentCredentialLocks || []);
-  if (!state.lkjUnlockRequired) {
-    return (state.credentialCorrect && !locked.has('credential') ? 4 : 0)
-      + (state.tailPressureQueried && !locked.has('tail') ? 3 : 0)
-      + ((!state.handSignalRequired || state.handSignalConfirmed) && !locked.has('handSignal') ? 3 : 0);
-  }
-  let earned = 0;
-  if (state.credentialCorrect && !locked.has('credential')) earned += 2;
-  if (state.departureNoticeReceived && !locked.has('notice')) earned += 1;
-  if ((!state.handSignalRequired || state.handSignalConfirmed) && !locked.has('handSignal')) earned += 1;
-  if (state.tailPressureQueried && !locked.has('tail')) earned += 2;
-  if (state.lkjUnlockMethodCorrect && !state.lkjUnlockMethodErrorRecorded && !locked.has('method')) earned += 1;
-  if (state.lkjUnlockFieldsCorrect && !state.lkjUnlockFieldsErrorRecorded && !locked.has('fields')) earned += 1;
-  if (state.lkjUnlockCombinationCorrect && !state.lkjUnlockCombinationErrorRecorded && !locked.has('combination')) earned += 2;
-  return earned;
+  const tailEarned = state.tailPressureQueried && !locked.has('tail');
+  if (state.scenarioId === 'normal') return (tailEarned ? 3 : 0) + (state.radioResponseCorrect && !locked.has('credential') && !locked.has('signalReadyCall') ? 3 : 0);
+  if (state.scenarioId === 'weather') return (tailEarned ? 3 : 0) + (state.orderSigned && !locked.has('credential') ? 3 : 0);
+  const firstContactCorrect = state.scenarioId === 'greenPermit' ? state.radioResponseCorrect : state.orderSigned;
+  const unlockCorrect = !state.lkjUnlockRequired || (
+    state.lkjUnlockMethodCorrect && !state.lkjUnlockMethodErrorRecorded && !locked.has('method')
+    && state.lkjUnlockFieldsCorrect && !state.lkjUnlockFieldsErrorRecorded && !locked.has('fields')
+    && state.lkjUnlockCombinationCorrect && !state.lkjUnlockCombinationErrorRecorded && !locked.has('combination')
+  );
+  return (tailEarned ? 2 : 0)
+    + (firstContactCorrect && state.credentialCorrect && !locked.has('credential') ? 2 : 0)
+    + (unlockCorrect ? 2 : 0);
+}
+
+function departureAuthorizationStepEarned(state) {
+  const locked = new Set(state.assessmentCredentialLocks || []);
+  const responseCorrect = state.scenarioId === 'weather' ? state.weatherReportSent : state.departureResponseCorrect;
+  return (state.departureNoticeReceived && responseCorrect && !locked.has('notice') && !locked.has('departureCall') ? 2 : 0)
+    + ((!state.handSignalRequired || state.handSignalConfirmed) && !locked.has('handSignal') ? 2 : 0);
 }
 
 export function scoreRun(state) {
   const p = procedureState(state);
   const scoreLocks = new Set(state.assessmentScoreLocks || []);
   const itemScores = PROCEDURE.map(([label, workflowTest, weight, scoreTest = workflowTest], index) => {
-    const rawEarned = index === 6 ? credentialStepEarned(state) : scoreTest(state) ? weight : 0;
+    const rawEarned = index === 6
+      ? preDepartureStepEarned(state)
+      : index === 8
+        ? departureAuthorizationStepEarned(state)
+        : scoreTest(state) ? weight : 0;
     const earned = scoreLocks.has(index) ? 0 : rawEarned;
     return {
       label,

@@ -1,8 +1,8 @@
-import { TrainSimulation } from './dynamics.js?rev=smooth-start-v18-parameter-ratio';
-import { PROCEDURE, procedureState, scoreRun } from './procedure.js?rev=smooth-start-v18-parameter-ratio';
-import { MstsRouteScene } from './mstsRouteScene.js?rev=smooth-start-v18-parameter-ratio';
-import { LKJ_FIELD_DEFINITIONS, LKJ_TRAINING_PARAMETERS, RUNNING_NOTICES, SIGNAL_ASPECTS, TRAIN_DYNAMICS } from './scenario.js?rev=smooth-start-v18-parameter-ratio';
-import { SCENARIOS, ROUTE_CONTEXT, getScenario, scenarioAudioPath } from './credentialScenario.js?rev=smooth-start-v18-parameter-ratio';
+import { TrainSimulation } from './dynamics.js?rev=smooth-start-v19-cir-incoming-clickfix';
+import { PROCEDURE, procedureState, scoreRun } from './procedure.js?rev=smooth-start-v19-cir-incoming-clickfix';
+import { MstsRouteScene } from './mstsRouteScene.js?rev=smooth-start-v19-cir-incoming-clickfix';
+import { LKJ_FIELD_DEFINITIONS, LKJ_TRAINING_PARAMETERS, RUNNING_NOTICES, SIGNAL_ASPECTS, TRAIN_DYNAMICS } from './scenario.js?rev=smooth-start-v19-cir-incoming-clickfix';
+import { SCENARIOS, ROUTE_CONTEXT, getScenario, scenarioAudioPath } from './credentialScenario.js?rev=smooth-start-v19-cir-incoming-clickfix';
 
 const $ = (q) => document.querySelector(q);
 const sim = new TrainSimulation();
@@ -451,10 +451,12 @@ function cirTask(state=sim.state){
   if(!state.scenarioSelected)return {key:'select',title:'尚未选择训练场景',instruction:'请先在教学／考评窗口选择场景。'};
   const scenario=getScenario(state.scenarioId);
   if(['weather','routeTicket'].includes(scenario.id)&&!state.orderSigned)return {key:'order',title:'接收并签收调度命令',instruction:'调度命令通过CIR接收，核对命令号、区间和行车办法后签收。'};
-  if(scenario.id==='normal'&&!state.radioContacted)return {key:'normal-contact',title:'呼叫车站值班员',instruction:'在CIR主界面按“车站值班员”，再按“呼叫”；听取来话后选择规范复诵。',audio:'normal'};
+  if(scenario.id==='normal'&&!(state.brakeTested&&state.releaseObserved))return {key:'wait-brake',title:'等待简略制动机试验完成',instruction:'完成减压制动、确认制动作用，并将大闸回运转位确认缓解后，车站才会第一次来电。'};
+  if(scenario.id==='normal'&&!state.radioContacted)return {key:'normal-signal-ready',title:'车站值班员来电',instruction:'简略制动机试验完成。CIR收到车站来电，请接听并规范复诵。',audio:'normal'};
   if(scenario.id==='greenPermit'&&!state.radioContacted)return {key:'permit-contact',title:'绿色许可证联控',instruction:'在CIR主界面呼叫车站值班员，听取绿色许可证联控后规范复诵。',audio:'greenPermit'};
   if(scenario.id==='normal'&&state.radioContacted&&!state.signalMeaningCorrect)return {key:'observe-ground',title:'观察地面出站信号',instruction:'关闭CIR，直接点击窗外本线出站信号机确认显示。'};
-  if(scenario.id==='normal'&&state.signalMeaningCorrect&&!state.directionObserved)return {key:'normal-direction',title:'复诵运行方向',instruction:'根据已接收的联控内容确认本次列车运行方向。'};
+  if(scenario.id==='normal'&&state.signalMeaningCorrect&&!state.locomotiveSignalObserved)return {key:'observe-loco',title:'确认机车信号',instruction:'关闭CIR，直接点击驾驶台右上方机车信号显示器确认显示。'};
+  if(scenario.id==='normal'&&state.locomotiveSignalObserved&&!state.departureNoticeReceived)return {key:'normal-departure',title:'车站第二次来电',instruction:'地面信号和机车信号均已确认。CIR收到发车联控来电，请接听并规范复诵。',audio:'departure'};
   if(scenario.id==='weather'&&state.orderSigned&&!state.locomotiveSignalObserved)return {key:'observe-loco',title:'确认机车信号',instruction:'关闭CIR，直接点击驾驶室右上方机车信号显示器确认显示。'};
   if(scenario.id==='weather'&&state.locomotiveSignalObserved&&!state.weatherReportSent)return {key:'weather-report',title:'报告并接收发车通知',instruction:'通过CIR报告地面出站信号无法辨认，听取车站发车通知后复诵。',audio:'departure'};
   if(['greenPermit','routeTicket'].includes(scenario.id)&&!state.credentialAttempted)return {key:'credential',title:`等待核对${scenario.documentTitle}`,instruction:'关闭CIR，点击驾驶台上的纸质凭证位置，逐项核对送交凭证。'};
@@ -515,22 +517,34 @@ function completeCirTask(action){
   if(action==='order'){command('order-sign');}
   else if(action==='contact-correct'){command('station-contact',true);}
   else if(action==='contact-wrong'){command('station-contact',false);}
-  else if(action==='direction-correct'){command('direction-answer','qidouchong');}
-  else if(action==='direction-wrong'){command('direction-answer','other');}
+  else if(action==='departure-correct'){command('departure-notice',true);}
+  else if(action==='departure-wrong'){command('departure-notice',false);}
   else if(action==='weather-report'){command('weather-report');}
   else if(action==='departure'){command('departure-notice');}
   cirAudioTask='';cirNotice='';renderCirWorkflow();
 }
 function renderCirWorkflow(){
   const box=cirRoot?.querySelector('.cir-workflow');if(!box)return;const state=sim.state;const task=cirTask(state);const scenario=getScenario(state.scenarioId);
+  // 仿真主循环会持续 render；CIR 操作区只能在任务状态改变时重建。
+  // 否则用户按下“接听／复诵”时，按钮节点会在 click 完成前被替换，表现为始终无法操作。
+  const signature=JSON.stringify([task.key,cirAudioTask,cirNotice,state.scenarioId,state.orderSigned,state.radioContacted,state.signalMeaningCorrect,state.locomotiveSignalObserved,state.departureNoticeReceived,state.credentialAttempted,state.lkjUnlockCorrect,state.tailDeviceId,state.tailDeviceLinked,state.tailPressureQueried,state.tailPressureValue]);
+  if(box.dataset.renderSignature===signature)return;
+  box.dataset.renderSignature=signature;
   let actions='';
   if(task.key==='order')actions=`${credentialDocument(scenario,'order')}<button type="button" data-cir-action="order">核对无误，确认签收</button>`;
-  else if(['normal-contact','permit-contact'].includes(task.key))actions=`<button type="button" data-cir-action="play">接收／重放车站来话</button>${cirAudioTask===task.key?`<button type="button" data-cir-action="contact-correct">规范复诵：车次、股道、方向及凭证内容</button><button type="button" class="secondary" data-cir-action="contact-wrong">错误复诵</button>`:''}`;
-  else if(task.key==='normal-direction')actions='<button type="button" data-cir-action="direction-correct">复诵：2026次，七斗冲方向</button><button type="button" class="secondary" data-cir-action="direction-wrong">复诵其他方向</button>';
+  else if(task.key==='normal-signal-ready')actions=`<button type="button" class="incoming-answer" data-cir-action="play">接听车站来电</button>${cirAudioTask===task.key?`<p class="cir-transcript">车站值班员：“K2026次出站信号好了”</p><button type="button" data-cir-action="contact-correct">复诵：K2026次出站信号好了，司机明白</button><button type="button" class="secondary" data-cir-action="contact-wrong">错误复诵</button>`:''}`;
+  else if(task.key==='permit-contact')actions=`<button type="button" data-cir-action="play">接收／重放车站来话</button>${cirAudioTask===task.key?`<button type="button" data-cir-action="contact-correct">规范复诵：车次、股道、方向及凭证内容</button><button type="button" class="secondary" data-cir-action="contact-wrong">错误复诵</button>`:''}`;
+  else if(task.key==='normal-departure')actions=`<button type="button" class="incoming-answer" data-cir-action="play">接听车站来电</button>${cirAudioTask===task.key?`<p class="cir-transcript">车站值班员：“K2026次3道发车”</p><button type="button" data-cir-action="departure-correct">复诵：K2026次3道发车，司机明白</button><button type="button" class="secondary" data-cir-action="departure-wrong">错误复诵</button>`:''}`;
   else if(task.key==='weather-report')actions=`<button type="button" data-cir-action="play">接收／重放发车通知</button>${cirAudioTask===task.key?'<button type="button" data-cir-action="weather-report">报告无法辨认地面信号并复诵发车通知</button>':''}`;
   else if(task.key==='departure')actions=`<button type="button" data-cir-action="play">接收／重放发车通知</button>${cirAudioTask===task.key?'<button type="button" data-cir-action="departure">规范复诵发车通知</button>':''}`;
   box.innerHTML=`<section><h3>${task.title}</h3><p>${task.instruction}</p>${cirNotice?`<p class="cir-notice">${cirNotice}</p>`:''}${actions}</section><section class="cir-tail-state"><h3>列尾装置</h3><dl><div><dt>连接</dt><dd>${state.tailDeviceLinked?state.tailDeviceId:'未连接'}</dd></div><div><dt>尾部风压</dt><dd>${state.tailPressureQueried?`${state.tailPressureValue} kPa`:'未查询'}</dd></div></dl><p>实际操作：主控 → 第6项输入6位列尾ID → 返回主界面 → 按“风压查询”。</p></section>`;
   box.querySelectorAll('[data-cir-action]').forEach((button)=>button.addEventListener('click',()=>completeCirTask(button.dataset.cirAction)));
+}
+function syncCirIncomingIndicator(state){
+  if(!elements.cirButton)return;
+  const task=cirTask(state);const incoming=['normal-signal-ready','normal-departure'].includes(task.key)&&cirAudioTask!==task.key;
+  elements.cirButton.classList.toggle('incoming-call',incoming);
+  elements.cirButton.setAttribute('aria-label',incoming?'车站来电：点击打开CIR接听':'打开CIR机车综合无线通信设备');
 }
 function openCir(){
   if(!cirRoot)buildCir();closeLkj();closeSignalInspection();closeCredentialModal();closeSwitchPanel();
@@ -701,6 +715,7 @@ function render(state,message='') {
   routeScene.update(state.distance,state.speed,selectedView,true,state.wholeTrainStartFraction);
   syncSignalTarget(state);
   syncHandSignalCard(state);
+  syncCirIncomingIndicator(state);
   if(selectedView==='front') {
     frame(elements.auto,[0,1,2,9,10,11][state.autoBrake],4,3); frame(elements.independent,Math.min(11,state.independentBrake),4,3); frame(elements.traction,tractionFrame(state.traction),2,8); frame(elements.direction,state.direction==='R'?0:state.direction==='N'?1:2,3,1);
     for(const [id] of keys) elements[id]?.classList.toggle('on',activeState(id,state));

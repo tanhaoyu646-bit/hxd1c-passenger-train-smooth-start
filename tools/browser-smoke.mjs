@@ -63,7 +63,7 @@ await send('Page.navigate', { url: baseUrl });
 await evaluate(`new Promise((resolve, reject) => {
   const started = Date.now();
   const timer = setInterval(() => {
-    const ready = document.querySelector('.route-scene.live') && document.querySelectorAll('#procedure li').length === 13;
+    const ready = document.querySelector('.route-scene.live') && document.querySelectorAll('#procedure li').length === 20;
     if (ready) { clearInterval(timer); resolve(true); }
     else if (Date.now() - started > 30000) { clearInterval(timer); reject(new Error('页面初始化超时')); }
   }, 100);

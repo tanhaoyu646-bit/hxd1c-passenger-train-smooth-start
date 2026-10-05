@@ -25,14 +25,24 @@ function prepare(id, mode = 'teaching') {
   return sim;
 }
 
+const earlyNormalCall = new TrainSimulation();
+assert.equal(earlyNormalCall.command('scenario-select', 'normal'), true);
+assert.equal(earlyNormalCall.command('station-contact', true), false, '简略试验完成前不应接通车站首次来电');
+assert.equal(earlyNormalCall.state.radioContacted, false, '被拒绝的接听不得写入联控完成状态');
+
+const earlyDepartureCall = prepare('normal');
+assert.equal(earlyDepartureCall.command('station-contact', true), true);
+assert.equal(earlyDepartureCall.command('departure-notice', true), false, '地面和机车信号确认前不应办理第二次发车联控');
+assert.equal(earlyDepartureCall.state.departureNoticeReceived, false, '被拒绝的第二次来电不得写入完成状态');
+
 function authorize(sim, id) {
   assert.equal(sim.command('tail-link', '123456'), true);
   assert.equal(sim.command('tail-query', sim.state.tailPipe), true);
   if (id === 'normal') {
     assert.equal(sim.command('station-contact'), true);
     assert.equal(sim.command('signal-answer', 'green'), true);
-    assert.equal(sim.command('direction-answer', 'qidouchong'), true);
     assert.equal(sim.command('locomotive-signal-answer', 'green'), true);
+    assert.equal(sim.command('departure-notice', true), true);
   } else if (id === 'weather') {
     assert.equal(sim.command('order-sign'), true);
     assert.equal(sim.command('locomotive-signal-answer', 'green'), true);
@@ -127,7 +137,8 @@ assert.equal(assessedWrong.command('lkj-special-unlock', false), true);
 assert.equal(assessedWrong.command('departure-notice'), true);
 assert.equal(assessedWrong.command('hand-signal-confirm'), true);
 assert.equal(procedureState(assessedWrong.state).complete[6], true, '考评模式错误操作应记录后继续流程');
-assert.equal(scoreRun(assessedWrong.state).itemScores[6].earned, 2, '凭证项应仅保留发车通知和手信号的分值');
+assert.equal(scoreRun(assessedWrong.state).itemScores[6].earned, 0, '凭证和LKJ解锁错误后，发车前联控项不得分');
+assert.equal(scoreRun(assessedWrong.state).itemScores[8].earned, 4, '发车通知和手信号规范完成应单独得分');
 
 const assessmentSoftGate = new TrainSimulation();
 assert.equal(assessmentSoftGate.command('training-mode', 'assessment'), true);
@@ -144,7 +155,7 @@ assert(assessmentSoftGate.state.assessmentScoreLocks.includes(1), '动车时未�
 assert(assessmentSoftGate.state.assessmentCredentialLocks.includes('credential'), '动车时未确认凭证应锁定对应子项失分');
 assessmentSoftGate.command('headlight');
 assessmentSoftGate.command('horn');
-assert.equal(scoreRun(assessmentSoftGate.state).itemScores[8].earned, 0, '动车后补做不得恢复已锁定的顺序分');
+assert.equal(scoreRun(assessmentSoftGate.state).itemScores[9].earned, 0, '动车后补做不得恢复已锁定的顺序分');
 for (let index = 0; index < 200000 && !assessmentSoftGate.state.completed; index += 1) assessmentSoftGate.tick(0.05);
 assert.equal(assessmentSoftGate.state.completed, true, '考评模式流程不完整时仍应能到达训练终点并结算');
 

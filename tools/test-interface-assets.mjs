@@ -38,10 +38,16 @@ assert.match(interfaceSource, /lkj-parameter-form/);
 assert.doesNotMatch(interfaceSource, /设备自检正常/);
 assert.doesNotMatch(interfaceSource, /button\.style\.backgroundImage/);
 assert.match(interfaceSource, /rear-lookout-active/);
+assert.match(interfaceSource, /K2026次出站信号好了/);
+assert.match(interfaceSource, /K2026次3道发车/);
+assert.match(interfaceSource, /normal-signal-ready/);
+assert.match(interfaceSource, /normal-departure/);
 assert.match(styles, /\.stage\.rear-lookout-active \.cab-layer\{display:none\}/);
 assert.match(styles, /\.lkj-native-base/);
 assert.match(sceneSource, /longitudinalSlack/);
 assert.match(sceneSource, /lateralSway/);
+assert.match(sceneSource, /rearLeft: THREE\.MathUtils\.degToRad\(165\)/);
+assert.match(sceneSource, /rearRight: THREE\.MathUtils\.degToRad\(-165\)/);
 assert.doesNotMatch(sceneSource, /Math\.random\(\).*Sway/);
 
 console.log('Interface assets valid: native LKJ states, transparent physical-key hotspots, pure 3D rear views, and deterministic damped start motion.');
