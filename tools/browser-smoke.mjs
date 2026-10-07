@@ -63,7 +63,7 @@ await send('Page.navigate', { url: baseUrl });
 await evaluate(`new Promise((resolve, reject) => {
   const started = Date.now();
   const timer = setInterval(() => {
-    const ready = document.querySelector('.route-scene.live') && document.querySelectorAll('#procedure li').length === 20;
+    const ready = document.querySelector('.route-scene.live') && document.querySelectorAll('#procedure li').length === 19;
     if (ready) { clearInterval(timer); resolve(true); }
     else if (Date.now() - started > 30000) { clearInterval(timer); reject(new Error('页面初始化超时')); }
   }, 100);
@@ -108,12 +108,12 @@ const interactionChecks = await evaluate(`(() => {
   document.querySelector('[data-scenario="normal"]').click();
   document.querySelector('#keys [data-id="lkj"]').click();
   document.querySelector('.lkj-trigger').click();
-  const firstOpen = document.querySelector('.lkj-screen').innerText.includes('监控主界面');
+  const firstOpen = Boolean(document.querySelector('.lkj-screen .lkj-native-chart'));
   document.querySelector('[data-lkj-key="query"]').click();
-  const queryReview = document.querySelector('.lkj-screen').innerText.includes('参数核对');
+  const queryReview = Boolean(document.querySelector('.lkj-screen .lkj-query-grid'));
   document.querySelector('.lkj-modal .device-close').click();
   document.querySelector('.lkj-trigger').click();
-  const reopenMonitor = document.querySelector('.lkj-screen').innerText.includes('监控主界面');
+  const reopenMonitor = Boolean(document.querySelector('.lkj-screen .lkj-native-chart'));
   document.querySelector('.lkj-modal .device-close').click();
   document.querySelector('.signal-trigger').click();
   const signalClickOpens = document.querySelector('.signal-modal').classList.contains('open');
@@ -122,7 +122,7 @@ const interactionChecks = await evaluate(`(() => {
   const locomotiveSignalClickable = Boolean(document.querySelector('.locomotive-signal-hotspot'));
   const cirHotspotRight = parseFloat(document.querySelector('.cir-hotspot')?.style.left || '0') > 90;
   const originalGameNeedles = document.querySelectorAll('img.original-game-needle').length === 9;
-  const lkjReferenceScreen = getComputedStyle(document.querySelector('.lkj-screen')).backgroundImage.includes('LKJ2000-monitor-reference.jpg');
+  const lkjReferenceScreen = document.querySelector('.lkj-native-base')?.src.includes('/assets/lkj/native-states/main-blank.png');
   return { dispatchOrderForm, routeTicketForm, greenPermitForm, firstOpen, queryReview, reopenMonitor, signalClickOpens, cirDeviceAvailable, locomotiveSignalClickable, cirHotspotRight, originalGameNeedles, lkjReferenceScreen };
 })()`);
 const cirTailQuery = await evaluate(`new Promise((resolve) => {

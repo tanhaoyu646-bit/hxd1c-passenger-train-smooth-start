@@ -1,21 +1,33 @@
-import { TRAIN_DYNAMICS } from './scenario.js?rev=split-pages-mobile-v23';
+import { TRAIN_DYNAMICS } from './scenario.js?rev=start-scoring-v25';
 
 const scenarioSignalReady = (s) => s.scenarioId === 'weather'
   ? s.locomotiveSignalObserved
   : s.signalObserved && s.locomotiveSignalObserved;
 
-const departureBrakesReady = (s) => !s.parkingBrake
-  && s.autoBrake === 0
-  && s.independentBrake === 0
-  && s.brakeCyl < 15;
+const parkingBrakeReleased = (s) => !s.parkingBrake;
+const assessmentOr = (s, attempted, correct) => s.trainingMode === 'assessment' ? attempted : correct;
+const baselineCorrect = (s) => s.tailBaselinePressure != null;
+const baselineReady = (s) => assessmentOr(s, s.tailBaselineQueryAttempted, baselineCorrect(s));
+const releaseRiseCorrect = (s) => s.autoBrakeReleaseAttempted
+  && s.tailReleaseQueryAttempted
+  && s.tailPressureRiseCorrect;
+const releaseRiseReady = (s) => assessmentOr(s, s.autoBrakeReleaseAttempted && s.tailReleaseQueryAttempted, releaseRiseCorrect(s));
+const notchOneCorrect = (s) => s.singleValveNotchSynchronized
+  && s.notchOneHoldCorrect
+  && s.tractionCurrentRising;
+const notchOneReady = (s) => assessmentOr(s, s.notchOneHoldAttempted, notchOneCorrect(s));
+const notchTwoRearCorrect = (s) => s.notchTwoSequenceCorrect && s.wholeTrainStarted && s.rearLookCompleted;
+const notchTwoRearReady = (s) => assessmentOr(s, s.notchTwoApplied && s.rearLookCompleted, notchTwoRearCorrect(s));
+const progressiveCorrect = (s) => s.progressiveToFourCorrect && s.smoothStartQualified;
+const progressiveReady = (s) => assessmentOr(s, s.notchFourApplied, progressiveCorrect(s));
+const lkjStartReady = (s) => assessmentOr(s, s.lkjStartAttempted, s.lkjStartCorrect);
 
 const preDepartureCommunicationReady = (s) => {
-  const tailReady = s.tailPressureQueried || s.trainingMode === 'assessment';
-  if (s.scenarioId === 'normal') return tailReady && s.radioContacted;
-  if (s.scenarioId === 'weather') return tailReady && s.orderSigned;
+  if (s.scenarioId === 'normal') return s.radioContacted;
+  if (s.scenarioId === 'weather') return s.orderSigned;
   const firstContactReady = s.scenarioId === 'greenPermit' ? s.radioContacted : s.orderSigned;
   const unlockReady = !s.lkjUnlockRequired || s.lkjUnlockCorrect || (s.trainingMode === 'assessment' && s.lkjUnlockAttempted);
-  return tailReady && firstContactReady && s.credentialAttempted && unlockReady;
+  return firstContactReady && s.credentialAttempted && unlockReady;
 };
 
 const departureAuthorizationReady = (s) => s.departureNoticeReceived
@@ -29,38 +41,48 @@ export const PROCEDURE = [
   ['升受电弓、闭合主断并建立总风', s => s.panto && s.netVoltage >= 22.5 && s.mainBreaker && s.compressor && s.mainRes >= 750, 5],
   ['简略制动机试验：减压并确认制动', s => s.brakeTested, 4],
   ['大闸回运转位并确认列车缓解', s => s.releaseObserved, 4],
-  ['查询列尾风压并完成发车前首次联控', preDepartureCommunicationReady, 6],
+  ['完成发车前联控、凭证及LKJ非正常确认', preDepartureCommunicationReady, 6],
   ['按场景确认地面信号和机车信号', scenarioSignalReady, 4],
   ['接听发车联控并确认发车手信号', departureAuthorizationReady, 4],
   ['开启前照灯并鸣笛', s => s.headlight && s.horn, 3],
   ['方向手柄置前进位', s => s.direction === 'F', 3],
-  ['确认大小闸缓解并缓解停放制动', departureBrakesReady, 5],
-  ['牵引手柄由零位推至1～2级', s => s.lowNotchApplied, 7],
-  ['保持低级位，等待牵引力向全列传递', s => s.lowNotchHeld, 7],
-  ['确认全列12辆车辆依次起动', s => s.wholeTrainStarted, 8],
-  ['左后或右后瞭望确认全列移动', s => s.rearLookCompleted, 6],
-  ['全列起动后逐级增加牵引', s => s.progressiveTraction, 7],
-  ['速度5～15 km/h时保持平稳加速', s => s.smoothStartQualified, 6],
-  ['接近出站信号机按压LKJ开车／7键', s => s.lkjStartCorrect || (s.trainingMode === 'assessment' && s.lkjStartAttempted), 5, s => s.lkjStartCorrect],
-  ['越过出站信号机后稳定运行300 m', s => s.completed, 4],
+  ['缓解停放制动', parkingBrakeReleased, 5],
+  ['制动保压状态首次查询并确认尾部风压', baselineReady, 5, baselineCorrect],
+  ['缓解自阀，再次查询确认尾部风压上升高于20 kPa', releaseRiseReady, 9, releaseRiseCorrect],
+  ['2秒内完成单阀缓解与1.0级，保持1～2秒确认电流上升', notchOneReady, 9, notchOneCorrect],
+  ['置2.0级，待全列起动并完成后部瞭望', notchTwoRearReady, 10, notchTwoRearCorrect],
+  ['全列起动后按2.0→3.0→4.0级平稳加速', progressiveReady, 7, progressiveCorrect],
+  ['到出站信号机位置按压LKJ开车／7键', lkjStartReady, 5, s => s.lkjStartCorrect],
+  ['越过出站信号机后稳定运行300 m', s => s.completed, 5],
 ];
 
-export const SMOOTH_PROCEDURE = [
+export const SMOOTH_LEVEL_PROCEDURE = [
   ['选择平道或上坡道起动场景', s => s.terrainSelected, 5],
-  ['按场景建立起动保持条件并缓解停放制动', s => !s.parkingBrake, 10],
-  ['按坡道要求建立初始牵引并缓解单阀', s => s.terrainMode === 'uphill'
-    ? s.hillHoldReleasedCorrectly && s.independentBrake === 0
-    : s.independentBrake === 0, 10],
-  ['牵引手柄由零位推至规定低级位', s => s.lowNotchApplied, 15],
-  ['保持低级位，等待牵引力向全列传递', s => s.lowNotchHeld, 15],
-  ['确认全列12辆车辆依次起动', s => s.wholeTrainStarted, 15],
-  ['左后或右后瞭望确认全列移动', s => s.rearLookCompleted, 10],
-  ['全列起动后逐级增加牵引', s => s.progressiveTraction, 10],
-  ['速度5～15 km/h时保持平稳加速', s => s.smoothStartQualified, 10],
+  ['缓解停放制动', parkingBrakeReleased, 5],
+  ['制动保压状态首次查询并确认尾部风压', baselineReady, 10, baselineCorrect],
+  ['缓解自阀，再次查询确认尾部风压上升高于20 kPa', releaseRiseReady, 20, releaseRiseCorrect],
+  ['2秒内完成单阀缓解与1.0级，保持1～2秒确认电流上升', notchOneReady, 15, notchOneCorrect],
+  ['置2.0级，待全列起动并完成后部瞭望', notchTwoRearReady, 20, notchTwoRearCorrect],
+  ['全列起动后按2.0→3.0→4.0级平稳加速', progressiveReady, 15, progressiveCorrect],
+  ['到出站信号机位置按压LKJ开车／7键', lkjStartReady, 10, s => s.lkjStartCorrect],
 ];
+
+export const SMOOTH_UPHILL_PROCEDURE = [
+  ['选择平道或上坡道起动场景', s => s.terrainSelected, 5],
+  ['缓解停放制动', parkingBrakeReleased, 5],
+  ['制动保压状态首次查询并确认尾部风压', baselineReady, 10, baselineCorrect],
+  ['2秒内完成单阀缓解与不高于1.0级，保持1～2秒确认电流上升', notchOneReady, 15, notchOneCorrect],
+  ['缓解自阀，再次查询确认尾部风压上升高于20 kPa', releaseRiseReady, 20, releaseRiseCorrect],
+  ['置2.0级，待全列起动并完成后部瞭望', notchTwoRearReady, 20, notchTwoRearCorrect],
+  ['全列起动后按2.0→3.0→4.0级平稳加速', progressiveReady, 15, progressiveCorrect],
+  ['到出站信号机位置按压LKJ开车／7键', lkjStartReady, 10, s => s.lkjStartCorrect],
+];
+
+export const SMOOTH_PROCEDURE = SMOOTH_LEVEL_PROCEDURE;
 
 export function getProcedure(state) {
-  return state?.trainingScope === 'smooth-only' ? SMOOTH_PROCEDURE : PROCEDURE;
+  if (state?.trainingScope !== 'smooth-only') return PROCEDURE;
+  return state.terrainMode === 'uphill' ? SMOOTH_UPHILL_PROCEDURE : SMOOTH_LEVEL_PROCEDURE;
 }
 
 export function procedureState(state) {
@@ -71,18 +93,16 @@ export function procedureState(state) {
 }
 function preDepartureStepEarned(state) {
   const locked = new Set(state.assessmentCredentialLocks || []);
-  const tailEarned = state.tailPressureQueried && !locked.has('tail');
-  if (state.scenarioId === 'normal') return (tailEarned ? 3 : 0) + (state.radioResponseCorrect && !locked.has('credential') && !locked.has('signalReadyCall') ? 3 : 0);
-  if (state.scenarioId === 'weather') return (tailEarned ? 3 : 0) + (state.orderSigned && !locked.has('credential') ? 3 : 0);
+  if (state.scenarioId === 'normal') return state.radioResponseCorrect && !locked.has('credential') && !locked.has('signalReadyCall') ? 6 : 0;
+  if (state.scenarioId === 'weather') return state.orderSigned && !locked.has('credential') ? 6 : 0;
   const firstContactCorrect = state.scenarioId === 'greenPermit' ? state.radioResponseCorrect : state.orderSigned;
   const unlockCorrect = !state.lkjUnlockRequired || (
     state.lkjUnlockMethodCorrect && !state.lkjUnlockMethodErrorRecorded && !locked.has('method')
     && state.lkjUnlockFieldsCorrect && !state.lkjUnlockFieldsErrorRecorded && !locked.has('fields')
     && state.lkjUnlockCombinationCorrect && !state.lkjUnlockCombinationErrorRecorded && !locked.has('combination')
   );
-  return (tailEarned ? 2 : 0)
-    + (firstContactCorrect && state.credentialCorrect && !locked.has('credential') ? 2 : 0)
-    + (unlockCorrect ? 2 : 0);
+  return (firstContactCorrect && state.credentialCorrect && !locked.has('credential') ? 3 : 0)
+    + (unlockCorrect ? 3 : 0);
 }
 
 function departureAuthorizationStepEarned(state) {
@@ -97,13 +117,9 @@ export function scoreRun(state) {
   const procedure = getProcedure(state);
   const scoreLocks = new Set(state.assessmentScoreLocks || []);
   const itemScores = procedure.map(([label, workflowTest, weight, scoreTest = workflowTest], index) => {
-    if (state.trainingScope === 'smooth-only') {
-      const earned = scoreTest(state) ? weight : 0;
-      return { label, weight, complete: Boolean(workflowTest(state)), correct: earned === weight, earned, locked: false };
-    }
-    const rawEarned = index === 6
+    const rawEarned = state.trainingScope !== 'smooth-only' && index === 6
       ? preDepartureStepEarned(state)
-      : index === 8
+      : state.trainingScope !== 'smooth-only' && index === 8
         ? departureAuthorizationStepEarned(state)
         : scoreTest(state) ? weight : 0;
     const earned = scoreLocks.has(index) ? 0 : rawEarned;
@@ -122,6 +138,7 @@ export function scoreRun(state) {
     + state.abrupt * 2
     + (state.prematureAcceleration ? 6 : 0)
     + (state.rollbackRisk ? 8 : 0)
+    + (state.tractionDelayExceeded ? 5 : 0)
     + (state.maxAcceleration > TRAIN_DYNAMICS.comfort.severeAcceleration ? 4 : 0)
     + (state.maxJerk > TRAIN_DYNAMICS.comfort.severeJerk ? 4 : 0));
   return { score: Math.max(0, Math.min(100, base - deductions)), completed: p.complete.filter(Boolean).length, deductions, itemScores };

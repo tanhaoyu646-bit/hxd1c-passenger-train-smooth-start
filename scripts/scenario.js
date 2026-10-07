@@ -91,17 +91,17 @@ export const SMOOTH_START_TERRAINS = Object.freeze({
     shortLabel: '平道',
     gradePermille: 0,
     requiredStartNotch: 1,
-    initialIndependentBrake: 0,
-    note: '大小闸与停放制动全部缓解后，以1级建立牵引；必要时用2级，全列起动前保持低级位。',
+    initialIndependentBrake: 2,
+    note: '制动保压时先查询尾部风压；缓解自阀并复查风压上升后，在2秒内完成单阀缓解与1.0级牵引。',
   }),
   uphill: Object.freeze({
     id: 'uphill',
     label: '上坡道起动',
     shortLabel: '上坡道',
     gradePermille: 4,
-    requiredStartNotch: 2,
+    requiredStartNotch: 1,
     initialIndependentBrake: 2,
-    note: '先由单阀保持机车制动并缓解停放制动，牵引置2级建立牵引力，再逐步缓解单阀，防止后溜。',
+    note: '制动保压时先查询尾部风压；在2秒内完成单阀缓解与不高于1.0级牵引，保持1～2秒后再缓解自阀。',
   }),
 });
 

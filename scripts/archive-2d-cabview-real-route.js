@@ -1,7 +1,7 @@
-import { TrainSimulation } from './dynamics.js?rev=split-pages-mobile-v23';
-import { getProcedure, procedureState, scoreRun } from './procedure.js?rev=split-pages-mobile-v23';
+import { TrainSimulation } from './dynamics.js?rev=start-scoring-v25';
+import { getProcedure, procedureState, scoreRun } from './procedure.js?rev=start-scoring-v25';
 import { MstsRouteScene } from './mstsRouteScene.js?rev=smooth-start-v19-cir-incoming-clickfix';
-import { LKJ_FIELD_DEFINITIONS, LKJ_TRAINING_PARAMETERS, RUNNING_NOTICES, SIGNAL_ASPECTS, TRAIN_DYNAMICS, SMOOTH_START_TERRAINS, getSmoothStartTerrain } from './scenario.js?rev=split-pages-mobile-v23';
+import { LKJ_FIELD_DEFINITIONS, LKJ_TRAINING_PARAMETERS, RUNNING_NOTICES, SIGNAL_ASPECTS, TRAIN_DYNAMICS, SMOOTH_START_TERRAINS, getSmoothStartTerrain } from './scenario.js?rev=start-scoring-v25';
 import { SCENARIOS, ROUTE_CONTEXT, getScenario, scenarioAudioPath } from './credentialScenario.js?rev=smooth-start-v19-cir-incoming-clickfix';
 
 const $ = (q) => document.querySelector(q);
@@ -370,7 +370,7 @@ function lkjMonitorView(overlay=''){
   const controlY=390-Math.min(120,controlLimit)/120*330;const positionX=191+Math.min(545,state.distance/Math.max(1,ROUTE_CONTEXT.trainingEndDistance)*545);
   const trace=lkjSpeedTracePoints();const status=state.lkjStartCorrect?'开车对标完成':state.speed>=1?'运行监控':'停车监控';
   const special=state.lkjUnlockCorrect?`<div class="lkj-native-special ${scenario.id}">${scenario.id==='greenPermit'?'绿色许可证行车':'路票行车'}</div>`:'';
-  const equipment=lkjEquipmentPanelVisible?`<aside class="lkj-native-equipment"><b>原边电流 <em>${Math.round(Math.max(0,state.traction)*105)}</em></b><b>列车管压力 <em>${Math.round(state.trainPipe)}</em></b><b>制动缸压力1 <em>${Math.round(state.brakeCyl)}</em></b><b>均衡风缸 <em>${Math.round(state.equalizingRes)}</em></b><b>制动缸压力2 <em>${Math.round(state.brakeCyl)}</em></b><b>工况 <em>${state.direction==='F'?'向前':state.direction==='R'?'向后':'零位'}　${state.traction>0?'牵引':'非零'}</em></b><b>过机矫正 <em>0　0　0</em></b><b>通道速度 <em>${Math.round(state.speed)}　${Math.round(state.speed)}　${Math.round(state.speed)}</em></b></aside>`:'';
+  const equipment=lkjEquipmentPanelVisible?`<aside class="lkj-native-equipment"><b>原边电流 <em>${Math.round(Math.max(0,state.actualTraction)*105)}</em></b><b>列车管压力 <em>${Math.round(state.trainPipe)}</em></b><b>制动缸压力1 <em>${Math.round(state.brakeCyl)}</em></b><b>均衡风缸 <em>${Math.round(state.equalizingRes)}</em></b><b>制动缸压力2 <em>${Math.round(state.brakeCyl)}</em></b><b>工况 <em>${state.direction==='F'?'向前':state.direction==='R'?'向后':'零位'}　${state.traction>0?'牵引':'非零'}</em></b><b>过机矫正 <em>0　0　0</em></b><b>通道速度 <em>${Math.round(state.speed)}　${Math.round(state.speed)}　${Math.round(state.speed)}</em></b></aside>`:'';
   return lkjFrame(`${lkjNativeTop(state)}${special}<svg class="lkj-native-chart" viewBox="0 0 800 615" preserveAspectRatio="none" aria-label="LKJ运行监控曲线"><polyline class="lkj-control-line" points="64,${controlY} 232,${controlY} 278,${controlY} 736,${controlY}"/><line class="lkj-position-line" x1="${positionX}" y1="61" x2="${positionX}" y2="390"/>${trace?`<polyline class="lkj-speed-line" points="${trace}"/>`:''}</svg>${equipment}<div class="lkj-native-status">${status}</div>${lkjNotice?`<div class="lkj-device-toast">${lkjNotice}</div>`:''}${overlay}`);
 }
 function lkjNonnormalOverlay(){
@@ -529,7 +529,7 @@ function renderCirWorkflow(){
   const box=cirRoot?.querySelector('.cir-workflow');if(!box)return;const state=sim.state;const task=cirTask(state);const scenario=getScenario(state.scenarioId);
   // 仿真主循环会持续 render；CIR 操作区只能在任务状态改变时重建。
   // 否则用户按下“接听／复诵”时，按钮节点会在 click 完成前被替换，表现为始终无法操作。
-  const signature=JSON.stringify([task.key,cirAudioTask,cirNotice,state.scenarioId,state.orderSigned,state.radioContacted,state.signalMeaningCorrect,state.locomotiveSignalObserved,state.departureNoticeReceived,state.credentialAttempted,state.lkjUnlockCorrect,state.tailDeviceId,state.tailDeviceLinked,state.tailPressureQueried,state.tailPressureValue]);
+  const signature=JSON.stringify([task.key,cirAudioTask,cirNotice,state.scenarioId,state.orderSigned,state.radioContacted,state.signalMeaningCorrect,state.locomotiveSignalObserved,state.departureNoticeReceived,state.credentialAttempted,state.lkjUnlockCorrect,state.tailDeviceId,state.tailDeviceLinked,state.tailPressureQueried,state.tailPressureValue,state.tailBaselinePressure,state.tailReleasePressure,state.tailPressureRise]);
   if(box.dataset.renderSignature===signature)return;
   box.dataset.renderSignature=signature;
   let actions='';
@@ -539,7 +539,12 @@ function renderCirWorkflow(){
   else if(task.key==='normal-departure')actions=`<button type="button" class="incoming-answer" data-cir-action="play">接听车站来电</button>${cirAudioTask===task.key?`<p class="cir-transcript">车站值班员：“K2026次3道发车”</p><button type="button" data-cir-action="departure-correct">复诵：K2026次3道发车，司机明白</button><button type="button" class="secondary" data-cir-action="departure-wrong">错误复诵</button>`:''}`;
   else if(task.key==='weather-report')actions=`<button type="button" data-cir-action="play">接收／重放发车通知</button>${cirAudioTask===task.key?'<button type="button" data-cir-action="weather-report">报告无法辨认地面信号并复诵发车通知</button>':''}`;
   else if(task.key==='departure')actions=`<button type="button" data-cir-action="play">接收／重放发车通知</button>${cirAudioTask===task.key?'<button type="button" data-cir-action="departure">规范复诵发车通知</button>':''}`;
-  box.innerHTML=`<section><h3>${task.title}</h3><p>${task.instruction}</p>${cirNotice?`<p class="cir-notice">${cirNotice}</p>`:''}${actions}</section><section class="cir-tail-state"><h3>列尾装置</h3><dl><div><dt>连接</dt><dd>${state.tailDeviceLinked?state.tailDeviceId:'未连接'}</dd></div><div><dt>尾部风压</dt><dd>${state.tailPressureQueried?`${state.tailPressureValue} kPa`:'未查询'}</dd></div></dl><p>实际操作：主控 → 第6项输入6位列尾ID → 返回主界面 → 按“风压查询”。</p></section>`;
+  const tailDetail=state.tailReleasePressure!=null
+    ? `缓解后 ${state.tailReleasePressure} kPa（上升 ${state.tailPressureRise} kPa）`
+    : state.tailBaselinePressure!=null
+      ? `制动基准 ${state.tailBaselinePressure} kPa`
+      : state.tailPressureQueried?`${state.tailPressureValue} kPa`:'未查询';
+  box.innerHTML=`<section><h3>${task.title}</h3><p>${task.instruction}</p>${cirNotice?`<p class="cir-notice">${cirNotice}</p>`:''}${actions}</section><section class="cir-tail-state"><h3>列尾装置</h3><dl><div><dt>连接</dt><dd>${state.tailDeviceLinked?state.tailDeviceId:'未连接'}</dd></div><div><dt>尾部风压</dt><dd>${tailDetail}</dd></div></dl><p>实际操作：制动保压时首次查询记录基准；自阀缓解后再次查询，确认上升高于20 kPa。</p></section>`;
   box.querySelectorAll('[data-cir-action]').forEach((button)=>button.addEventListener('click',()=>completeCirTask(button.dataset.cirAction)));
 }
 function syncCirIncomingIndicator(state){
@@ -612,7 +617,7 @@ function buildTrainingControls(){
     ? Object.values(SMOOTH_START_TERRAINS).map((terrain)=>`<button type="button" data-terrain="${terrain.id}">${terrain.shortLabel}</button>`).join('')
     : Object.values(SCENARIOS).map((scenario)=>`<button type="button" data-scenario="${scenario.id}">${scenario.shortLabel}</button>`).join('');
   const note=TRAINING_APP==='smooth'
-    ? '专项仅训练平道与上坡道起动。平道以1级建立牵引；上坡道由单阀保持，2级建立牵引后再逐步缓解，防止后溜。'
+    ? '专项仅训练平道与上坡道起动。平道先缓解自阀；上坡道先以单阀保持、1.0级建立牵引力，再缓解自阀。两种情况均需核对尾压上升严格大于20 kPa。'
     : '完整训练从设备初始位置开始，包含正常、天气恶劣、绿色许可证和路票四类发车场景。';
   root.innerHTML=`<div class="training-section-label">教学方式</div><div class="training-row mode-row"><button type="button" data-mode="teaching">教学模式</button><button type="button" data-mode="assessment">考评模式</button></div><div class="training-section-label">${TRAINING_APP==='smooth'?'线路条件':'发车场景'}</div><div class="training-row scenario-row">${choices}</div><p class="equipment-local-note">${note}</p><p class="initial-check-state" data-initial-state>请在驾驶台逐项核对初始位置。</p><div class="initial-check-grid" data-initial-grid>${INITIAL_CHECKS.map(([key,label,target])=>`<button type="button" class="initial-check-card pending" data-initial-card="${key}"><b>${label}</b><span>${target} · 未核对</span></button>`).join('')}</div><div class="training-row"><button type="button" data-training="initial">提交初始位置核对</button></div><p class="training-state" data-training-state></p>`;
   root.querySelector('[data-training="initial"]').addEventListener('click',()=>command('initial-confirm'));
@@ -730,11 +735,11 @@ function render(state,message='') {
     // 严格按原 HXD1C.cvf 的 DIAL ScaleRange 映射；不能为了夸大变化
     // 临时缩小量程，否则同一压力会落在错误刻度。
     setNeedle(elements.speedNeedle,state.speed,158); setNeedle(elements.mainNeedle,state.mainRes,1600); setNeedle(elements.pipeNeedle,state.trainPipe,1000); setNeedle(elements.eqNeedle,state.equalizingRes,1600); setNeedle(elements.cylNeedle,state.brakeCyl,1600); setNeedle(elements.mainNeedle2,state.mainRes,1600); setNeedle(elements.pipeNeedle2,state.trainPipe,1600); setNeedle(elements.eqNeedle2,state.equalizingRes,1600); setNeedle(elements.cylNeedle2,state.brakeCyl,1600);
-    const current=Math.max(0,state.traction)*105; elements.voltageBar.style.transform=`scaleY(${Math.max(.03,state.netVoltage/30)})`; elements.currentBars.forEach((bar,index)=>bar.style.transform=`scaleY(${Math.max(.02,Math.min(1,(current-index*22)/1000))})`);
+    const current=Math.max(0,state.actualTraction)*105; elements.voltageBar.style.transform=`scaleY(${Math.max(.03,state.netVoltage/30)})`; elements.currentBars.forEach((bar,index)=>bar.style.transform=`scaleY(${Math.max(.02,Math.min(1,(current-index*22)/1000))})`);
     const scenario=getScenario(state.scenarioId);const activeLimit=state.lkjUnlockCorrect&&state.lkjUnlockLimit?state.lkjUnlockLimit:state.limitedStart?15:scenario.requiresLkjUnlock?20:80;
     elements.speedDigital.textContent=state.speed<10?state.speed.toFixed(1):Math.round(state.speed); elements.limitDigital.textContent=String(activeLimit); elements.clockDigital.textContent=new Date().toLocaleTimeString('zh-CN',{hour12:false});
     const autoNames=['运转位','初制动位','常用制动Ⅱ','常用制动Ⅲ','常用制动Ⅳ','紧急位'];const independentNames=['缓解位','制动Ⅰ','制动Ⅱ','制动Ⅲ','制动Ⅳ','全制动位'];
-    elements.autoPosition.querySelector('span').textContent=autoNames[state.autoBrake];elements.independentPosition.querySelector('span').textContent=independentNames[state.independentBrake];elements.directionPosition.querySelector('span').textContent=state.direction==='F'?'前进位':state.direction==='R'?'后退位':'中立位';elements.tractionPosition.querySelector('span').textContent=state.traction>0?`牵引 ${state.traction} 级`:state.traction<0?`电制动 ${Math.abs(state.traction)} 级`:'零位';
+    elements.autoPosition.querySelector('span').textContent=autoNames[state.autoBrake];elements.independentPosition.querySelector('span').textContent=independentNames[state.independentBrake];elements.directionPosition.querySelector('span').textContent=state.direction==='F'?'前进位':state.direction==='R'?'后退位':'中立位';elements.tractionPosition.querySelector('span').textContent=state.traction>0?`牵引 ${state.traction.toFixed(1)} 级`:state.traction<0?`电制动 ${Math.abs(state.traction).toFixed(1)} 级`:'零位';
     frame(elements.pantoDisplay,state.panto?1:0,1,2); frame(elements.signal,SIGNAL_ASPECTS[state.signalAspect].frame,4,2);
     const paperAvailable=deliveredCredentialAvailable(state);elements.credentialPaper.hidden=!paperAvailable;elements.credentialPaper.classList.toggle('available',paperAvailable);
   }
@@ -749,37 +754,32 @@ function render(state,message='') {
   }
   renderSignalInspection(state);renderCredentialModal(state);renderCirWorkflow();syncTrainingControls(state);
   const assessmentFinished=state.trainingMode==='assessment'&&state.completed;if(!assessmentFinished)resultShown=false;
-  const p=procedureState(state);const procedure=getProcedure(state); $('#procedure').innerHTML=procedure.map(([n],i)=>`<li class="${p.complete[i]?'done':i===p.current?'active':''}">${n}</li>`).join(''); const score=scoreRun(state); const aspect=SIGNAL_ASPECTS[state.signalAspect];const scenario=getScenario(state.scenarioId);const context=state.trainingScope==='smooth-only'?(state.terrainSelected?getSmoothStartTerrain(state.terrainMode).label:'未选择线路条件'):(state.scenarioSelected?scenario.label:'未选择场景'); $('#status').innerHTML=`<strong>状态：</strong>${state.completed?'训练完成':'第 '+(p.current+1)+' 步'}<br>场景 ${context}${state.trainingScope==='complete'?` · 凭证 ${state.scenarioSelected?scenario.credential:'—'}`:''}<br>总风 ${state.mainRes.toFixed(0)} kPa · 制动缸 ${state.brakeCyl.toFixed(0)} kPa · 停放制动 ${state.parkingBrake?'施加':'缓解'}<br>${state.trainingScope==='smooth-only'?`坡度 ${getSmoothStartTerrain(state.terrainMode).gradePermille}‰ · ${state.rollbackRisk?'存在后溜风险':'保持状态正常'}`:`地面信号 ${aspect.label}${state.authority?' · 行车凭证已确认':''}`}<br>${state.trainingScope==='smooth-only'?'专项不考核LKJ开车对标':`LKJ ${state.lkjStartCorrect?'已开车对标':state.lkjStartAttempted?'开车对标待复核':`距对标点 ${Math.max(0,Math.round(ROUTE_CONTEXT.departureSignalDistance-state.distance))} m`}`}<br>速度 ${state.speed.toFixed(1)} km/h · 全列起动 ${Math.round(state.wholeTrainStartFraction*100)}% · 当前得分 ${score.score}${score.deductions?` · 扣分 ${score.deductions}`:''}`; const workflowProgress=$('[data-workflow-progress]');if(workflowProgress)workflowProgress.textContent=`${p.complete.filter(Boolean).length}/${procedure.length}`; renderSmoothStartPanel(state); if(message)$('#hint').textContent=message;if(p.done||assessmentFinished)showResultReport(state);
+  const p=procedureState(state);const procedure=getProcedure(state); $('#procedure').innerHTML=procedure.map(([n],i)=>`<li class="${p.complete[i]?'done':i===p.current?'active':''}">${n}</li>`).join(''); const score=scoreRun(state); const aspect=SIGNAL_ASPECTS[state.signalAspect];const scenario=getScenario(state.scenarioId);const context=state.trainingScope==='smooth-only'?(state.terrainSelected?getSmoothStartTerrain(state.terrainMode).label:'未选择线路条件'):(state.scenarioSelected?scenario.label:'未选择场景'); $('#status').innerHTML=`<strong>状态：</strong>${state.completed?'训练完成':'第 '+(p.current+1)+' 步'}<br>场景 ${context}${state.trainingScope==='complete'?` · 凭证 ${state.scenarioSelected?scenario.credential:'—'}`:''}<br>总风 ${state.mainRes.toFixed(0)} kPa · 制动缸 ${state.brakeCyl.toFixed(0)} kPa · 停放制动 ${state.parkingBrake?'施加':'缓解'}<br>${state.trainingScope==='smooth-only'?`坡度 ${getSmoothStartTerrain(state.terrainMode).gradePermille}‰ · ${state.rollbackRisk?'存在后溜风险':'保持状态正常'}`:`地面信号 ${aspect.label}${state.authority?' · 行车凭证已确认':''}`}<br>LKJ ${state.lkjStartCorrect?'已开车对标':state.lkjStartAttempted?'开车对标待复核':`距对标点 ${Math.max(0,Math.round(ROUTE_CONTEXT.departureSignalDistance-state.distance))} m`}<br>速度 ${state.speed.toFixed(1)} km/h · 全列起动 ${Math.round(state.wholeTrainStartFraction*100)}% · 当前得分 ${score.score}${score.deductions?` · 扣分 ${score.deductions}`:''}`; const workflowProgress=$('[data-workflow-progress]');if(workflowProgress)workflowProgress.textContent=`${p.complete.filter(Boolean).length}/${procedure.length}`; renderSmoothStartPanel(state); if(message)$('#hint').textContent=message;if(p.done||assessmentFinished)showResultReport(state);
 }
 
 function renderSmoothStartPanel(state){
   const startedCars=Math.min(state.consistCars||12,Math.round((state.wholeTrainStartFraction||0)*(state.consistCars||12)));
   const setText=(id,value)=>{const element=$(id);if(element)element.textContent=value;};
   setText('#metric-speed',`${state.speed.toFixed(1)} km/h`);
-  setText('#metric-traction',state.traction>0?`${state.traction}级`:'零位');
+  setText('#metric-traction',state.traction>0?`${state.traction.toFixed(1)}级`:'零位');
   setText('#metric-start',`${startedCars}/${state.consistCars||12}辆`);
   const acceleration=Math.abs(state.currentAcceleration||0);const jerk=Math.abs(state.currentJerk||0);
   setText('#metric-acceleration',acceleration<=TRAIN_DYNAMICS.comfort.warningAcceleration?'平稳':'偏大');
   setText('#metric-jerk',jerk<=TRAIN_DYNAMICS.comfort.warningJerk?'正常':'过大');
   const specialty=state.trainingScope==='smooth-only';const terrain=getSmoothStartTerrain(state.terrainMode||'level');
-  setText('#metric-context-label',specialty?'线路坡度':'LKJ对标距离');
-  setText('#metric-lkj',specialty?`${terrain.gradePermille}‰`:(state.lkjStartCorrect?'已对标':`${Math.max(0,Math.round(ROUTE_CONTEXT.departureSignalDistance-state.distance))} m`));
+  setText('#metric-context-label','LKJ对标距离');
+  setText('#metric-lkj',state.lkjStartCorrect?'已对标':`${Math.max(0,Math.round(ROUTE_CONTEXT.departureSignalDistance-state.distance))} m`);
   const guide=$('#smooth-guide');if(!guide)return;
-  const items=specialty?[
-    [terrain.id==='uphill'?'2级建立牵引':'1级低级位加载',state.lowNotchApplied,state.lowNotchApplied?'初始牵引已建立':terrain.note],
-    [terrain.id==='uphill'?'逐步缓解单阀':'保持低级位',terrain.id==='uphill'?state.hillHoldReleasedCorrectly:state.lowNotchHeld,terrain.id==='uphill'?(state.hillHoldReleasedCorrectly?'保持力交接正确':'牵引建立前保持单阀制动'):(state.lowNotchHeld?'牵引力稳定建立':'暂勿继续加级')],
-    ['全列依次起动',state.wholeTrainStarted,`${startedCars}/${state.consistCars||12}辆`],
-    ['后部瞭望确认',state.rearLookCompleted,state.rearLookCompleted?'已确认':'使用左后或右后瞭望'],
-    ['逐级增加牵引',state.progressiveTraction,state.wholeTrainStarted?'每次增加一级':'全列起动后解锁'],
-    ['低速平稳加速',state.smoothStartQualified,state.smoothStartQualified?'起动平稳合格':'保持5～15 km/h并控制冲动'],
-  ]:[
-    ['低级位加载',state.lowNotchApplied,state.lowNotchApplied?'已置1～2级':'由零位推至1～2级'],
-    ['保持低级位',state.lowNotchHeld,state.lowNotchHeld?'牵引力稳定建立':'暂勿继续加级'],
-    ['全列依次起动',state.wholeTrainStarted,`${startedCars}/${state.consistCars||12}辆`],
-    ['后部瞭望确认',state.rearLookCompleted,state.rearLookCompleted?'已确认':'使用左后或右后瞭望'],
-    ['逐级增加牵引',state.progressiveTraction,state.wholeTrainStarted?'每次增加一级':'全列起动后解锁'],
-    ['LKJ开车对标',state.lkjStartCorrect,state.lkjStartCorrect?'已完成':`距出站信号机约${Math.max(0,Math.round(ROUTE_CONTEXT.departureSignalDistance-state.distance))}m`],
-  ];
+  const baseline=['制动保压查询尾压',state.tailBaselineQueryAttempted,state.tailBaselineQueryAttempted?`基准 ${Math.round(state.tailBaselinePressure||0)} kPa`:'自阀制动位查询'];
+  const release=['缓解自阀再查尾压',state.tailPressureRiseCorrect,state.tailReleaseQueryAttempted?`上升 ${Math.round(state.tailPressureRise||0)} kPa（需>20）`:'缓解后查询，上升必须>20 kPa'];
+  const notchOne=['单阀缓解与1.0级',state.singleValveNotchSynchronized&&state.notchOneHoldCorrect,state.singleValveNotchSynchronized?(state.notchOneHoldCorrect?'2秒内配合，已保持1～2秒':'已配合，等待牵引电流上升'):'先后不限，间隔不得超过2秒'];
+  const notchTwo=['2.0级与全列起动',state.notchTwoSequenceCorrect&&state.wholeTrainStarted,`${startedCars}/${state.consistCars||12}辆${state.notchTwoSequenceCorrect?' · 顺序正确':''}`];
+  const rear=['后部瞭望确认',state.rearLookCompleted,state.rearLookCompleted?'已确认全列起动':'全列起动后使用左后或右后瞭望'];
+  const progressive=['2.0→3.0→4.0级',state.progressiveToFourCorrect,state.progressiveToFourCorrect?'逐级加速完成':'不得跳级，后部瞭望后逐级加载'];
+  const lkj=['出站信号机附近按开车键',state.lkjStartCorrect,state.lkjStartCorrect?'已正确对标':`距出站信号机约${Math.max(0,Math.round(ROUTE_CONTEXT.departureSignalDistance-state.distance))}m`];
+  const items=specialty
+    ? (terrain.id==='uphill'?[baseline,notchOne,release,notchTwo,rear,progressive,lkj]:[baseline,release,notchOne,notchTwo,rear,progressive,lkj])
+    : [baseline,release,notchOne,notchTwo,rear,progressive,lkj];
   guide.innerHTML=items.map(([label,done,detail],index)=>`<li class="${done?'done':!done&&items.slice(0,index).every(([,ready])=>ready)?'active':''}"><b>${index+1}. ${label}</b><span>${detail}</span></li>`).join('');
   const coach=$('#coach-progress');if(coach){coach.style.width=`${Math.round((state.wholeTrainStartFraction||0)*100)}%`;coach.parentElement?.classList.toggle('complete',Boolean(state.wholeTrainStarted));}
 }

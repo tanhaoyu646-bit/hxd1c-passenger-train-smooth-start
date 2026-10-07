@@ -1,4 +1,4 @@
-import { LKJ_TRAINING_PARAMETERS, SIGNAL_ASPECTS, TRAIN_DYNAMICS, getLkjMismatchFields, getSmoothStartTerrain } from './scenario.js?rev=split-pages-mobile-v23';
+import { LKJ_TRAINING_PARAMETERS, SIGNAL_ASPECTS, TRAIN_DYNAMICS, getLkjMismatchFields, getSmoothStartTerrain } from './scenario.js?rev=start-scoring-v25';
 import { getScenario, ROUTE_CONTEXT } from './credentialScenario.js?rev=lkj-cir-gauge-alignment-v1-20260928';
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
@@ -44,6 +44,9 @@ export class TrainSimulation {
       weatherReportSent: false, departureNoticeReceived: false, limitedStart: false,
       tailDeviceId: '', tailDeviceLinked: false, tailQueryAttempted: false,
       tailPressureQueried: false, tailPressureValue: null, tailQueryCount: 0,
+      tailBaselineQueryAttempted: false, tailBaselinePressure: null, tailBaselineQueryAt: null,
+      tailReleaseQueryAttempted: false, tailReleasePressure: null, tailReleaseQueryAt: null,
+      tailPressureRise: null, tailPressureRiseCorrect: false,
       signalMismatch: false, signalPassed: false, completed: false,
       headlight: false, horn: false, hornActive: false, vigilanceAcknowledged: false, direction: 'N',
       auxiliaryLight: false, markerFront: '0', markerRear: '0', cabLight: false,
@@ -59,6 +62,13 @@ export class TrainSimulation {
       wholeTrainStartFraction: 0, wholeTrainStarted: false,
       lowNotchApplied: false, lowNotchHeld: false, lowNotchStartConfirmed: false,
       progressiveTraction: false, prematureAcceleration: false,
+      autoBrakeReleaseAttempted: false, autoBrakeReleasedAt: null,
+      independentBrakeReleasedAt: null, notchOneAppliedAt: null,
+      singleValveNotchSynchronized: false, notchOneHoldAttempted: false,
+      notchOneHoldSeconds: null, notchOneHoldCorrect: false, tractionCurrentRising: false,
+      tractionPowerEstablished: false, tractionPowerEstablishedAt: null, tractionDelayExceeded: false,
+      notchTwoApplied: false, notchTwoAppliedAt: null, notchTwoSequenceCorrect: false,
+      notchThreeAfterStart: false, notchFourApplied: false, progressiveToFourCorrect: false,
       rearLookSeconds: 0, rearLookCompleted: false,
       currentAcceleration: 0, currentJerk: 0, smoothSeconds: 0, smoothStartQualified: false,
       rejected: 0, abrupt: 0, maxAcceleration: 0, maxJerk: 0, lastAcceleration: 0,
@@ -94,6 +104,26 @@ export class TrainSimulation {
   isAssessment() { return this.state.trainingMode === 'assessment'; }
   initialWorkflowReady() { return this.state.initialConfirmed || (this.isAssessment() && this.state.initialAttempted); }
   lkjWorkflowReady() { return this.state.lkjConfirmed || (this.isAssessment() && this.state.lkjAttempted); }
+  startMode() { return this.state.trainingScope === 'smooth-only' ? (this.state.terrainMode || 'level') : 'level'; }
+  resetStartEvaluation() {
+    Object.assign(this.state, {
+      tailBaselineQueryAttempted: false, tailBaselinePressure: null, tailBaselineQueryAt: null,
+      tailReleaseQueryAttempted: false, tailReleasePressure: null, tailReleaseQueryAt: null,
+      tailPressureRise: null, tailPressureRiseCorrect: false,
+      autoBrakeReleaseAttempted: false, autoBrakeReleasedAt: null,
+      independentBrakeReleasedAt: null, notchOneAppliedAt: null,
+      singleValveNotchSynchronized: false, notchOneHoldAttempted: false,
+      notchOneHoldSeconds: null, notchOneHoldCorrect: false, tractionCurrentRising: false,
+      tractionPowerEstablished: false, tractionPowerEstablishedAt: null, tractionDelayExceeded: false,
+      notchTwoApplied: false, notchTwoAppliedAt: null, notchTwoSequenceCorrect: false,
+      notchThreeAfterStart: false, notchFourApplied: false, progressiveToFourCorrect: false,
+    });
+  }
+  refreshSingleValveNotchSync() {
+    const s = this.state;
+    if (s.independentBrakeReleasedAt == null || s.notchOneAppliedAt == null) return;
+    s.singleValveNotchSynchronized = Math.abs(s.independentBrakeReleasedAt - s.notchOneAppliedAt) <= 2;
+  }
   lockAssessmentScore(index, reason) {
     if (!this.isAssessment()) return;
     const s = this.state;
@@ -122,12 +152,12 @@ export class TrainSimulation {
       [8, s.departureNoticeReceived && (!s.handSignalRequired || s.handSignalConfirmed), '未完成发车联控或未确认发车手信号即动车'],
       [9, s.headlight && s.horn, '未开启前照灯或未鸣笛即动车'],
       [10, s.direction === 'F', '换向手柄未置前进位即动车'],
-      [11, !s.parkingBrake && s.autoBrake === 0 && s.independentBrake === 0 && s.brakeCyl < TRACTION_BRAKE_CYL_MAX, '起动前制动状态未完全缓解'],
+      [11, !s.parkingBrake, '起动前停放制动未缓解'],
     ];
     for (const [index, correct, reason] of checks) if (!correct) this.lockAssessmentScore(index, reason);
     if (!s.credentialCorrect) this.lockAssessmentCredential('credential', `${scenario.label}行车凭证未正确确认即动车`);
     if (!s.departureNoticeReceived) this.lockAssessmentCredential('notice', '未接收第二次发车联控即动车');
-    if (!s.tailPressureQueried) this.lockAssessmentCredential('tail', '未通过CIR查询列尾风压即动车');
+    if (!s.tailBaselineQueryAttempted) this.lockAssessmentCredential('tail', '未在制动保压状态查询并确认基准尾部风压');
     if (s.handSignalRequired && !s.handSignalConfirmed) this.lockAssessmentCredential('handSignal', '未确认发车手信号即动车');
     if (s.lkjUnlockRequired && !s.lkjUnlockMethodCorrect) this.lockAssessmentCredential('method', '未正确选择LKJ非正常行车方式即动车');
     if (s.lkjUnlockRequired && !s.lkjUnlockFieldsCorrect) this.lockAssessmentCredential('fields', '未正确输入LKJ非正常行车编号即动车');
@@ -143,14 +173,13 @@ export class TrainSimulation {
     if (!this.isAssessment() && !s.horn) reasons.push('尚未鸣笛');
     if (s.direction !== 'F') reasons.push('换向手柄未在前进位');
     if (s.parkingBrake) reasons.push('停放制动未缓解');
-    if (s.autoBrake > 0) reasons.push('自动制动阀未在运转位');
-    const uphillHoldingStart = s.trainingScope === 'smooth-only'
-      && s.terrainMode === 'uphill'
-      && s.speed < .5
-      && requestedTraction > 0
-      && requestedTraction <= 2;
-    if (s.independentBrake > 0 && !uphillHoldingStart) reasons.push('单独制动阀未在缓解位');
-    if (s.brakeCyl >= TRACTION_BRAKE_CYL_MAX && !uphillHoldingStart) reasons.push(`制动缸压力仍为 ${Math.ceil(s.brakeCyl)} kPa`);
+    // 起动建立牵引阶段允许先后在2秒内完成“单阀缓解＋1.0级”：
+    // 平道可短时以单阀保持，上坡道可由自阀保持列车制动。仅放行不高于1.0级，
+    // 顺序与时间是否规范由评分状态机记录，不把错误操作隐藏成无法操作。
+    const lowNotchPowerBuild = s.speed < .5 && requestedTraction > 0 && requestedTraction <= 1;
+    if (s.autoBrake > 0 && !(lowNotchPowerBuild && this.startMode() === 'uphill')) reasons.push('自动制动阀未在运转位');
+    if (s.independentBrake > 0 && !lowNotchPowerBuild) reasons.push('单独制动阀未在缓解位');
+    if (s.brakeCyl >= TRACTION_BRAKE_CYL_MAX && !lowNotchPowerBuild) reasons.push(`制动缸压力仍为 ${Math.ceil(s.brakeCyl)} kPa`);
     return reasons;
   }
   syncAuthority() {
@@ -158,20 +187,19 @@ export class TrainSimulation {
     const scenario = getScenario(s.scenarioId);
     const lkjReady = this.lkjWorkflowReady();
     const specialUnlockReady = !s.lkjUnlockRequired || s.lkjUnlockCorrect || (this.isAssessment() && s.lkjUnlockAttempted);
-    const tailReady = s.tailPressureQueried || this.isAssessment();
     if (scenario.id === 'normal') {
       s.credentialConfirmed = Boolean(s.radioContacted && s.signalObserved && s.locomotiveSignalObserved && s.departureNoticeReceived);
       s.credentialCorrect = Boolean(s.credentialConfirmed && s.radioResponseCorrect && s.signalMeaningCorrect && s.departureResponseCorrect);
-      s.authority = Boolean(lkjReady && tailReady && s.credentialConfirmed && specialUnlockReady && (s.credentialCorrect || this.isAssessment()) && (!s.handSignalRequired || s.handSignalConfirmed));
+      s.authority = Boolean(lkjReady && s.credentialConfirmed && specialUnlockReady && (s.credentialCorrect || this.isAssessment()) && (!s.handSignalRequired || s.handSignalConfirmed));
     } else if (scenario.id === 'weather') {
       s.credentialConfirmed = Boolean(s.orderSigned && s.locomotiveSignalObserved && s.weatherReportSent && s.departureNoticeReceived);
       s.credentialCorrect = Boolean(s.credentialConfirmed && !s.signalMismatch);
       // 显示核对错误用于扣分并提示司机主动处置，不由仿真系统替司机切除牵引。
       // 因此授权状态不再直接绑定 signalMismatch；实际红灯越过仍由既有红灯防护逻辑处理。
-      s.authority = Boolean(lkjReady && tailReady && s.credentialConfirmed && specialUnlockReady && (!s.handSignalRequired || s.handSignalConfirmed));
+      s.authority = Boolean(lkjReady && s.credentialConfirmed && specialUnlockReady && (!s.handSignalRequired || s.handSignalConfirmed));
     } else {
       s.credentialConfirmed = Boolean(s.credentialAttempted && s.departureNoticeReceived);
-      s.authority = Boolean(lkjReady && tailReady && s.credentialConfirmed && specialUnlockReady && (s.credentialCorrect || this.isAssessment()) && (!s.handSignalRequired || s.handSignalConfirmed));
+      s.authority = Boolean(lkjReady && s.credentialConfirmed && specialUnlockReady && (s.credentialCorrect || this.isAssessment()) && (!s.handSignalRequired || s.handSignalConfirmed));
     }
   }
   applySmoothStartPreset() {
@@ -189,20 +217,21 @@ export class TrainSimulation {
     s.mainBreaker = true;
     s.compressor = true;
     s.mainRes = 850;
-    s.equalizingRes = 600;
-    s.trainPipe = 600;
-    s.tailPipe = 598;
-    s.brakeCyl = 0;
+    s.equalizingRes = 550;
+    s.trainPipe = 550;
+    s.tailPipe = 548;
+    s.brakeCyl = 105;
     s.brakeTested = true;
     s.releaseObserved = true;
-    s.releasePropagation = 1;
-    s.autoBrake = 0;
+    s.releasePropagation = 0;
+    s.autoBrake = 1;
     const terrain = getSmoothStartTerrain(s.terrainMode || 'level');
     s.independentBrake = terrain.initialIndependentBrake;
     s.tailDeviceId = '202601';
     s.tailDeviceLinked = true;
-    s.tailPressureQueried = true;
-    s.tailPressureValue = 598;
+    s.tailPressureQueried = false;
+    s.tailPressureValue = null;
+    s.tailQueryCount = 0;
     s.radioContacted = true;
     s.radioResponseAttempted = true;
     s.radioResponseCorrect = true;
@@ -240,6 +269,7 @@ export class TrainSimulation {
     s.direction = 'F';
     // 专项训练仍要求学生亲自缓解停放制动，再由零位加载牵引。
     s.parkingBrake = true;
+    this.resetStartEvaluation();
     this.syncAuthority();
   }
   command(id, value) {
@@ -290,6 +320,7 @@ export class TrainSimulation {
       s.progressiveTraction = false; s.prematureAcceleration = false;
       s.rearLookSeconds = 0; s.rearLookCompleted = false;
       s.currentAcceleration = 0; s.currentJerk = 0; s.smoothSeconds = 0; s.smoothStartQualified = false;
+      this.resetStartEvaluation();
       this.syncAuthority();
       if (s.trainingScope === 'smooth-only') this.applySmoothStartPreset();
       this.emit(`已选择“${scenario.label}”场景：${scenario.description}`);
@@ -318,6 +349,9 @@ export class TrainSimulation {
       s.tailQueryAttempted = false;
       s.tailPressureQueried = false;
       s.tailPressureValue = null;
+      s.tailBaselineQueryAttempted = false; s.tailBaselinePressure = null; s.tailBaselineQueryAt = null;
+      s.tailReleaseQueryAttempted = false; s.tailReleasePressure = null; s.tailReleaseQueryAt = null;
+      s.tailPressureRise = null; s.tailPressureRiseCorrect = false;
       this.syncAuthority();
       this.emit(`列尾装置 ${tailId} 已建立连接。`);
       return true;
@@ -337,6 +371,47 @@ export class TrainSimulation {
       s.tailPressureValue = Math.max(0, Math.round(pressure));
       s.tailPressureQueried = s.tailPressureValue >= 560 && s.tailPressureValue <= 620;
       s.tailQueryCount += 1;
+      if (s.autoBrake > 0 && s.tailBaselinePressure == null) {
+        s.tailBaselineQueryAttempted = true;
+        s.tailBaselinePressure = s.tailPressureValue;
+        s.tailBaselineQueryAt = s.elapsed;
+        // 首次制动保压尾压查询是“起车阶段”的计时起点。此前简略试验中的
+        // 自阀缓解不属于“具备开车条件后10秒内实加牵引力”的考核范围。
+        s.autoBrakeReleaseAttempted = false;
+        s.autoBrakeReleasedAt = null;
+        s.tractionDelayExceeded = false;
+        s.tractionPowerEstablished = false;
+        s.tractionPowerEstablishedAt = null;
+        s.tractionCurrentRising = false;
+        // 制动保压时的基准值通常低于运转压力，不沿用“560～620 kPa”确认范围。
+        s.tailPressureQueried = s.tailPressureValue >= 400 && s.tailPressureValue <= 580;
+        this.syncAuthority();
+        this.emit(s.tailPressureQueried
+          ? `已确认制动保压状态尾部风压 ${s.tailPressureValue} kPa，作为本次起动基准值。`
+          : `基准尾部风压 ${s.tailPressureValue} kPa 异常，已记录；请检查制动保压状态。`);
+        return this.isAssessment() || s.tailPressureQueried;
+      }
+      if (s.tailBaselinePressure == null) {
+        s.tailBaselineQueryAttempted = true;
+        if (this.isAssessment()) {
+          if (!s.assessmentSequenceErrors.includes('未在制动保压状态查询基准尾部风压')) s.assessmentSequenceErrors.push('未在制动保压状态查询基准尾部风压');
+          this.emit('当前自阀已缓解，无法建立制动状态基准风压；错误已记录，考评继续。');
+          return true;
+        }
+        return this.reject('应在自阀制动保压状态先查询并确认基准尾部风压。');
+      }
+      if (s.autoBrake === 0) {
+        s.tailReleaseQueryAttempted = true;
+        s.tailReleasePressure = s.tailPressureValue;
+        s.tailReleaseQueryAt = s.elapsed;
+        s.tailPressureRise = s.tailReleasePressure - s.tailBaselinePressure;
+        s.tailPressureRiseCorrect = s.tailPressureRise > 20;
+        this.syncAuthority();
+        this.emit(s.tailPressureRiseCorrect
+          ? `缓解后尾部风压 ${s.tailReleasePressure} kPa，较基准上升 ${s.tailPressureRise} kPa，确认合格。`
+          : `缓解后尾部风压仅上升 ${s.tailPressureRise} kPa，未达到“高于20 kPa”；请等待风压继续上升后复查。`);
+        return this.isAssessment() || s.tailPressureRiseCorrect;
+      }
       this.syncAuthority();
       if (!s.tailPressureQueried && !this.isAssessment()) return this.reject(`列尾风压 ${s.tailPressureValue} kPa 不在本次训练确认范围内，请检查列车管状态后重新查询。`);
       this.emit(s.tailPressureQueried
@@ -671,11 +746,36 @@ export class TrainSimulation {
     }
     if (id === 'auto-brake') {
       const next = clamp(Number(value), 0, 5); if (next < s.autoBrake - 1 || next > s.autoBrake + 2) s.abrupt += 1;
+      const previous = s.autoBrake;
       this.invalidateInitialCheck('autoBrake');
       if (next >= 1 && s.trainPipe > 420) s.brakeTested = true;
-      s.autoBrake = next; this.emit(next === 0 ? '自动制动阀已回运转位。' : `自动制动阀置于制动档 ${next}。`); return true;
+      s.autoBrake = next;
+      if (previous > 0 && next === 0 && s.tailBaselinePressure != null) {
+        s.autoBrakeReleaseAttempted = true;
+        s.autoBrakeReleasedAt = s.elapsed;
+        if (this.startMode() === 'uphill' && s.notchOneAppliedAt != null) {
+          s.notchOneHoldAttempted = true;
+          s.notchOneHoldSeconds = s.elapsed - s.notchOneAppliedAt;
+          s.notchOneHoldCorrect = s.notchOneHoldSeconds >= 1
+            && s.notchOneHoldSeconds <= 2
+            && s.tractionCurrentRising;
+        }
+        if (this.startMode() === 'uphill' && !s.tractionCurrentRising && s.trainingScope === 'smooth-only') {
+          if (!s.assessmentSequenceErrors.includes('上坡道未建立牵引电流即缓解自阀')) s.assessmentSequenceErrors.push('上坡道未建立牵引电流即缓解自阀');
+        }
+      }
+      this.emit(next === 0 ? '自动制动阀已回运转位；须在缓解后10秒内实际建立牵引力，并复查列尾风压。' : `自动制动阀置于制动档 ${next}。`); return true;
     }
-    if (id === 'independent-brake') { this.invalidateInitialCheck('independentBrake'); s.independentBrake = clamp(Number(value), 0, 5); this.emit('单独制动阀档位已调整。'); return true; }
+    if (id === 'independent-brake') {
+      const previous = s.independentBrake;
+      this.invalidateInitialCheck('independentBrake');
+      s.independentBrake = clamp(Number(value), 0, 5);
+      if (previous > 0 && s.independentBrake === 0) {
+        s.independentBrakeReleasedAt = s.elapsed;
+        this.refreshSingleValveNotchSync();
+      }
+      this.emit(s.independentBrake === 0 ? '单独制动阀已缓解。' : `单独制动阀置于制动档 ${s.independentBrake}。`); return true;
+    }
     if (id === 'traction') {
       // 原 HXD1C Combined_Control：前推为 7 个牵引位，中央为零位，后拉为 8 个电制动位。
       const next = clamp(Number(value), -8, 7);
@@ -701,8 +801,42 @@ export class TrainSimulation {
       s.traction = next;
       const terrain = getSmoothStartTerrain(s.terrainMode || 'level');
       if (next >= terrain.requiredStartNotch && next <= 2) s.lowNotchApplied = true;
-      if (s.wholeTrainStarted && next > previous && next - previous === 1) s.progressiveTraction = true;
-      this.emit(next > 0 ? `牵引手柄置于 ${next} 级。` : next < 0 ? `电制动置于 ${Math.abs(next)} 级。` : '牵引手柄已回零。'); return true;
+      if (next === 1 && previous !== 1) {
+        s.notchOneAppliedAt = s.elapsed;
+        this.refreshSingleValveNotchSync();
+      }
+      if (next === 2 && previous !== 2) {
+        s.notchTwoApplied = true;
+        s.notchTwoAppliedAt = s.elapsed;
+        if (this.startMode() === 'level') {
+          s.notchOneHoldAttempted = true;
+          s.notchOneHoldSeconds = s.notchOneAppliedAt == null ? null : s.elapsed - s.notchOneAppliedAt;
+          s.notchOneHoldCorrect = s.notchOneHoldSeconds != null
+            && s.notchOneHoldSeconds >= 1
+            && s.notchOneHoldSeconds <= 2
+            && s.tractionCurrentRising;
+        }
+        const orderCorrect = this.startMode() === 'uphill'
+          ? s.notchOneAppliedAt != null
+            && s.autoBrakeReleasedAt != null
+            && s.tailReleaseQueryAt != null
+            && s.notchOneAppliedAt < s.autoBrakeReleasedAt
+            && s.autoBrakeReleasedAt <= s.tailReleaseQueryAt
+          : s.tailReleaseQueryAt != null
+            && s.notchOneAppliedAt != null
+            && s.tailReleaseQueryAt <= s.notchOneAppliedAt;
+        s.notchTwoSequenceCorrect = s.singleValveNotchSynchronized
+          && s.notchOneHoldCorrect
+          && s.tailPressureRiseCorrect
+          && orderCorrect;
+      }
+      if (s.wholeTrainStarted && next === 3 && previous === 2) s.notchThreeAfterStart = true;
+      if (next === 4) {
+        s.notchFourApplied = true;
+        s.progressiveToFourCorrect = Boolean(s.wholeTrainStarted && s.rearLookCompleted && s.notchThreeAfterStart && previous === 3);
+        s.progressiveTraction = s.progressiveToFourCorrect;
+      }
+      this.emit(next > 0 ? `牵引主手柄置于 ${next.toFixed(1)} 级。` : next < 0 ? `电制动置于 ${Math.abs(next).toFixed(1)} 级。` : '牵引主手柄已回零位。'); return true;
     }
     return false;
   }
@@ -737,6 +871,26 @@ export class TrainSimulation {
     s.tractionForce = tractionAllowed && s.actualTraction > 0
       ? Math.min(TRAIN_DYNAMICS.maxStartingTractiveEffortN, s.actualTraction * TRAIN_DYNAMICS.tractionForcePerNotchN) * Math.max(.34, 1 - s.speed / 125)
       : 0;
+    if (s.tractionForce >= 10000) {
+      s.tractionCurrentRising = true;
+      if (!s.tractionPowerEstablished) {
+        s.tractionPowerEstablished = true;
+        s.tractionPowerEstablishedAt = s.elapsed;
+        if (s.autoBrakeReleasedAt != null && s.tractionPowerEstablishedAt - s.autoBrakeReleasedAt > 10) {
+          s.tractionDelayExceeded = true;
+          if (!s.assessmentSequenceErrors.includes('自阀缓解超过10秒仍未实加牵引力')) s.assessmentSequenceErrors.push('自阀缓解超过10秒仍未实加牵引力');
+        }
+        this.emit('牵引电流正在逐步上升，机车已实际建立牵引力。');
+      }
+    }
+    if (s.autoBrakeReleasedAt != null
+      && !s.tractionPowerEstablished
+      && !s.tractionDelayExceeded
+      && s.elapsed - s.autoBrakeReleasedAt > 10) {
+      s.tractionDelayExceeded = true;
+      if (!s.assessmentSequenceErrors.includes('自阀缓解超过10秒仍未实加牵引力')) s.assessmentSequenceErrors.push('自阀缓解超过10秒仍未实加牵引力');
+      this.emit('自阀缓解后超过10秒仍未实际建立牵引力，本项已记录扣分。');
+    }
     const electricBrake = s.traction < 0 ? Math.abs(s.traction) * 43000 : 0;
     const parkingBrakeForce = s.parkingBrake ? 450000 : 0;
     s.brakeForce = s.brakeCyl * 1250 + electricBrake + parkingBrakeForce;
@@ -751,16 +905,16 @@ export class TrainSimulation {
     const acceleration = (s.tractionForce - s.brakeForce - resistance) / TRAIN_DYNAMICS.totalMassKg;
     const actual = s.speed <= 0 && acceleration < 0 ? 0 : acceleration;
     if (s.trainingScope === 'smooth-only' && s.terrainMode === 'uphill' && s.speed < .12) {
-      const holdingReleased = !s.parkingBrake && s.independentBrake === 0;
-      if (holdingReleased && s.actualTraction < 1.5) {
+      const holdingReleased = !s.parkingBrake && s.independentBrake === 0 && s.autoBrake === 0;
+      if (holdingReleased && !s.tractionPowerEstablished) {
         s.rollbackRisk = true;
         if (!s.assessmentSequenceErrors.includes('上坡起动保持力不足，存在后溜风险')) {
           s.assessmentSequenceErrors.push('上坡起动保持力不足，存在后溜风险');
           s.abrupt += 2;
-          this.emit('上坡起动保持力不足：应先以2级建立牵引力，再逐步缓解单阀。');
+          this.emit('上坡起动保持力不足：应先以不高于1.0级建立牵引电流，再缓解自阀。');
         }
       }
-      if (holdingReleased && s.actualTraction >= 1.5) s.hillHoldReleasedCorrectly = true;
+      if (holdingReleased && s.tractionPowerEstablished) s.hillHoldReleasedCorrectly = true;
     }
     const activeLimit = s.lkjUnlockCorrect && s.lkjUnlockLimit > 0 ? s.lkjUnlockLimit : s.limitedStart ? 15 : 120;
     s.speed = clamp(s.speed + actual * dt * 3.6, 0, activeLimit); s.distance += s.speed / 3.6 * dt;
@@ -812,13 +966,31 @@ export class TrainSimulation {
       s.lkjStartDistance = s.distance;
       this.reject('已越过 LKJ 开车对标点，未按压【开车／7】键；本项错误已记录。');
     }
+    const specialtyOperationalComplete = s.wholeTrainStarted && s.rearLookCompleted && s.notchFourApplied && s.lkjStartAttempted;
+    const specialtyCorrect = s.tailPressureRiseCorrect
+      && !s.tractionDelayExceeded
+      && s.singleValveNotchSynchronized
+      && s.notchOneHoldCorrect
+      && s.notchTwoSequenceCorrect
+      && s.progressiveToFourCorrect
+      && s.smoothStartQualified
+      && s.lkjStartCorrect;
     const specialtyComplete = s.trainingScope === 'smooth-only'
-      && s.wholeTrainStarted && s.rearLookCompleted && s.progressiveTraction && s.smoothStartQualified;
+      && (this.isAssessment() ? specialtyOperationalComplete : specialtyCorrect);
     if (specialtyComplete && !s.completed) {
       s.completed = true;
       this.emit(`${getSmoothStartTerrain(s.terrainMode).label}专项完成：全列起动、后部瞭望和低速平稳加速均已完成。`);
     }
-    const coreComplete = s.wholeTrainStarted && s.rearLookCompleted && s.smoothStartQualified && s.lkjStartCorrect;
+    const coreComplete = s.tailPressureRiseCorrect
+      && !s.tractionDelayExceeded
+      && s.singleValveNotchSynchronized
+      && s.notchOneHoldCorrect
+      && s.notchTwoSequenceCorrect
+      && s.wholeTrainStarted
+      && s.rearLookCompleted
+      && s.progressiveToFourCorrect
+      && s.smoothStartQualified
+      && s.lkjStartCorrect;
     if (s.signalPassed && !s.completed && s.distance >= ROUTE_CONTEXT.trainingEndDistance && s.speed >= 5 && (coreComplete || this.isAssessment())) {
       s.completed = true;
       this.emit('已越过出站信号机后稳定运行 300 m，本次训练结束。');
