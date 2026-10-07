@@ -6,9 +6,14 @@ import { getProcedure } from '../scripts/procedure.js';
 
 const departureHtml = await readFile(new URL('../index.html', import.meta.url), 'utf8');
 const smoothHtml = await readFile(new URL('../smooth-start/index.html', import.meta.url), 'utf8');
+const layoutCss = await readFile(new URL('../styles/smooth-start.css', import.meta.url), 'utf8');
 assert.match(departureHtml, /data-training-app="departure"/);
 assert.match(smoothHtml, /data-training-app="smooth"/);
 assert.match(smoothHtml, /<base href="\.\.\/">/);
+assert.match(departureHtml, /fullscreen-v24/);
+assert.match(smoothHtml, /fullscreen-v24/);
+assert.match(layoutCss, /\.stage\{position:absolute;inset:0;width:100%;height:100%;max-width:none/);
+assert.match(layoutCss, /\.control-sidebar \.drawer\{position:fixed/);
 assert.deepEqual(Object.keys(SMOOTH_START_TERRAINS), ['level', 'uphill']);
 
 const full = new TrainSimulation();

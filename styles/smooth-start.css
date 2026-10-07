@@ -74,3 +74,28 @@
 [hidden]{display:none!important}.mobile-controls-enabled .landscape-gate:not([hidden]){display:grid;position:fixed;inset:0;z-index:3000;place-items:center;padding:max(18px,env(safe-area-inset-top)) max(18px,env(safe-area-inset-right)) max(18px,env(safe-area-inset-bottom)) max(18px,env(safe-area-inset-left));background:#02090ef5}.mobile-controls-enabled .landscape-card button{min-width:150px;min-height:46px;border:1px solid #5bd9ff;border-radius:8px;background:#0d5b83}.mobile-controls-enabled .touch-target{display:block}.mobile-controls-enabled .stage-toolbar{right:max(1%,env(safe-area-inset-right));top:max(1%,env(safe-area-inset-top))}.mobile-controls-enabled .mobile-fullscreen-exit{right:max(8px,env(safe-area-inset-right));top:max(8px,env(safe-area-inset-top))}.mobile-controls-enabled .drawer{height:var(--visual-height,100dvh);top:var(--visual-offset-top,0px);padding-bottom:env(safe-area-inset-bottom)}
 @media(orientation:portrait){.mobile-controls-enabled .rotate-tip{display:grid;position:fixed;inset:0;z-index:2900;place-items:center;padding:24px;background:#02090ef2;color:#e7f8ff;text-align:center}.mobile-controls-enabled .landscape-gate:not([hidden]){display:grid}.mobile-controls-enabled .landscape-gate:not([hidden]) .landscape-card{max-width:88vw}}
 @media(orientation:landscape) and (max-height:620px){body[data-training-app="smooth"] .smooth-training{display:block;position:fixed;z-index:12;left:max(6px,env(safe-area-inset-left));right:max(6px,env(safe-area-inset-right));bottom:max(5px,env(safe-area-inset-bottom));padding:4px;border:1px solid #245a74;border-radius:8px;background:#04131ddd;pointer-events:none}body[data-training-app="smooth"] .smooth-training-head,body[data-training-app="smooth"] .smooth-guide{display:none}body[data-training-app="smooth"] .dynamic-strip{display:grid!important;grid-template-columns:repeat(6,1fr);gap:3px;margin:0}body[data-training-app="smooth"] .dynamic-strip div{padding:4px}body[data-training-app="smooth"] .dynamic-strip span{font-size:8px}body[data-training-app="smooth"] .dynamic-strip b{font-size:10px}.device-modal,.result-modal{height:var(--visual-height,100dvh);top:var(--visual-offset-top,0px);padding:max(4px,env(safe-area-inset-top)) max(4px,env(safe-area-inset-right)) max(4px,env(safe-area-inset-bottom)) max(4px,env(safe-area-inset-left))}}
+
+/* 驾驶画面默认采用沉浸式全视口布局；工具、流程和提示均悬浮，不再占用画面尺寸。 */
+html,body{width:100%;height:100%;overflow:hidden}
+.topbar{display:none}
+.app-shell{position:fixed;left:0;top:var(--visual-offset-top,0px);width:100vw;height:var(--visual-height,100dvh);max-width:none;margin:0;padding:0;display:block}
+.workspace{position:absolute;inset:0;width:100%;height:100%}
+.stage{position:absolute;inset:0;width:100%;height:100%;max-width:none;margin:0;border:0;aspect-ratio:auto;box-shadow:none}
+.cab-layer{object-fit:fill}
+.cab-layer.side-view,.cab-layer.rear-view{object-fit:fill}
+.control-sidebar .drawer{position:fixed;z-index:30;right:0;top:var(--visual-offset-top,0px);bottom:auto;width:min(390px,90vw);height:var(--visual-height,100dvh);margin:0!important;border-radius:0;translate:105% 0;transition:translate .25s ease;background:#061827fa}
+.control-sidebar .drawer.open{translate:0}
+.control-sidebar .drawer-close{display:block}
+.control-sidebar .panel ol{max-height:calc(var(--visual-height,100dvh) - 55px)}
+.drawer-backdrop.open{display:block;position:fixed;inset:0;z-index:25;background:#0009}
+.view-tabs{position:fixed;z-index:15;left:50%;bottom:max(10px,env(safe-area-inset-bottom));translate:-50% 0;max-width:calc(100vw - 20px);margin:0;padding:5px;overflow:auto;justify-content:flex-start;border:1px solid #367896;border-radius:9px;background:#04131ddd;box-shadow:0 4px 18px #0009}
+.view-tabs button{flex:0 0 auto;padding:7px 10px;font-size:11px}
+.hint{position:fixed;z-index:14;left:50%;bottom:max(60px,calc(env(safe-area-inset-bottom) + 58px));translate:-50% 0;width:min(760px,calc(100vw - 20px));min-height:0;margin:0;padding:7px 12px;background:#04131ddd;pointer-events:none}
+.smooth-training{position:fixed;z-index:13;left:max(8px,env(safe-area-inset-left));bottom:max(104px,calc(env(safe-area-inset-bottom) + 102px));width:min(860px,calc(100vw - 410px));margin:0;padding:5px;background:#04131ddd;pointer-events:none}
+.smooth-training-head,.smooth-guide{display:none}
+.smooth-training .dynamic-strip{grid-template-columns:repeat(6,minmax(0,1fr));gap:4px;margin:0}
+.smooth-training .dynamic-strip div{padding:5px}
+.smooth-training .dynamic-strip span{font-size:8px}
+.smooth-training .dynamic-strip b{font-size:10px}
+@media(max-width:980px){.smooth-training{right:max(8px,env(safe-area-inset-right));width:auto}.control-sidebar .drawer{width:min(380px,90vw)}}
+@media(orientation:landscape) and (max-height:620px){.app-shell{height:var(--visual-height,100dvh)}.stage{height:100%}.view-tabs{bottom:max(5px,env(safe-area-inset-bottom));padding:3px}.view-tabs button{min-height:44px;padding:6px 9px}.hint{display:none}.smooth-training{bottom:max(55px,calc(env(safe-area-inset-bottom) + 53px))}.mobile-fullscreen-exit{display:block}}
