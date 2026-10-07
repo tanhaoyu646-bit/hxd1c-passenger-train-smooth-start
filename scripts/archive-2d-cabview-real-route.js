@@ -1,7 +1,7 @@
-import { TrainSimulation } from './dynamics.js?rev=start-scoring-v25';
-import { getProcedure, procedureState, scoreRun } from './procedure.js?rev=start-scoring-v25';
+import { TrainSimulation } from './dynamics.js?rev=mobile-controls-v26';
+import { getProcedure, procedureState, scoreRun } from './procedure.js?rev=mobile-controls-v26';
 import { MstsRouteScene } from './mstsRouteScene.js?rev=smooth-start-v19-cir-incoming-clickfix';
-import { LKJ_FIELD_DEFINITIONS, LKJ_TRAINING_PARAMETERS, RUNNING_NOTICES, SIGNAL_ASPECTS, TRAIN_DYNAMICS, SMOOTH_START_TERRAINS, getSmoothStartTerrain } from './scenario.js?rev=start-scoring-v25';
+import { LKJ_FIELD_DEFINITIONS, LKJ_TRAINING_PARAMETERS, RUNNING_NOTICES, SIGNAL_ASPECTS, TRAIN_DYNAMICS, SMOOTH_START_TERRAINS, getSmoothStartTerrain } from './scenario.js?rev=mobile-controls-v26';
 import { SCENARIOS, ROUTE_CONTEXT, getScenario, scenarioAudioPath } from './credentialScenario.js?rev=smooth-start-v19-cir-incoming-clickfix';
 
 const $ = (q) => document.querySelector(q);
@@ -148,7 +148,10 @@ function createFront() {
   // 原图控件保持原比例，另加透明的大触控区，避免手机上手指遮住并按不中小手柄。
   const touchControls=[
     ['auto',elements.auto,23,326,70,91,'拖动自动制动阀'],
-    ['independent',elements.independent,122,326,66,91,'拖动单独制动阀'],
+    // 单阀与停放制动红、绿按钮距离很近。手机端把单阀触控区拆成
+    // “左侧全高＋手柄下部”两个区域，明确让出停放制动按钮区域。
+    ['independent',elements.independent,122,326,35,91,'拖动单独制动阀'],
+    ['independent',elements.independent,157,380,31,37,'拖动单独制动阀'],
     ['traction',elements.traction,447,326,80,116,'拖动牵引和电制动手柄'],
   ];
   for(const [id,target,x,y,w,h,label] of touchControls){const zone=makeTouchTarget(id,x,y,w,h,label);zone.addEventListener('pointerdown',(event)=>startDrag(id,target,event));}
@@ -805,6 +808,31 @@ function bindControlDrawers(){
   $('#workflow-scrim')?.addEventListener('click',()=>setControlDrawer());
   addEventListener('keydown',(event)=>{if(event.key==='Escape')setControlDrawer();});
 }
+function setMetricsPanel(open=false){
+  const panel=$('#smooth-training-panel');const toggle=$('#metrics-toggle');
+  if(!panel||!toggle)return;
+  panel.classList.toggle('mobile-open',Boolean(open));
+  toggle.classList.toggle('active',Boolean(open));
+  toggle.setAttribute('aria-expanded',String(Boolean(open)));
+  toggle.textContent=open?'收起数据':'运行数据';
+}
+function bindMetricsPanel(){
+  const toggle=$('#metrics-toggle');if(!toggle)return;
+  toggle.addEventListener('click',(event)=>{event.preventDefault();const panel=$('#smooth-training-panel');setMetricsPanel(!panel?.classList.contains('mobile-open'));});
+  addEventListener('keydown',(event)=>{if(event.key==='Escape')setMetricsPanel(false);});
+}
+function setViewPanel(open=false){
+  const panel=$('#mobile-view-tabs');const toggle=$('#view-toggle');
+  if(!panel||!toggle)return;
+  panel.classList.toggle('mobile-open',Boolean(open));
+  toggle.classList.toggle('active',Boolean(open));
+  toggle.setAttribute('aria-expanded',String(Boolean(open)));
+}
+function bindViewPanel(){
+  const toggle=$('#view-toggle');if(!toggle)return;
+  toggle.addEventListener('click',(event)=>{event.preventDefault();const open=!$('#mobile-view-tabs')?.classList.contains('mobile-open');setMetricsPanel(false);setControlDrawer();setViewPanel(open);});
+  addEventListener('keydown',(event)=>{if(event.key==='Escape')setViewPanel(false);});
+}
 const mobileLike=matchMedia('(pointer: coarse)').matches||matchMedia('(max-width:620px)').matches||matchMedia('(max-height:600px) and (orientation:landscape)').matches||navigator.maxTouchPoints>0||/Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
 if(mobileLike)document.body.classList.add('mobile-controls-enabled');
 let mobileEntered=!mobileLike;
@@ -825,6 +853,8 @@ async function enterImmersive(){
 }
 async function exitImmersive(){
   closeDevicePanels();
+  setMetricsPanel(false);
+  setViewPanel(false);
   try{if(document.fullscreenElement)await document.exitFullscreen();else if(document.webkitFullscreenElement)await document.webkitExitFullscreen();}catch{ /* CSS 状态仍可正常退出。 */ }
   document.documentElement.classList.remove('immersive');
   routeScene.resize();
@@ -832,10 +862,10 @@ async function exitImmersive(){
 $('#enter-training').addEventListener('click',enterImmersive);
 $('#exit-immersive').addEventListener('click',exitImmersive);
 addEventListener('fullscreenchange',()=>{if(!document.fullscreenElement&&document.documentElement.classList.contains('immersive')&&!mobileLike)document.documentElement.classList.remove('immersive');routeScene.resize();});
-addEventListener('orientationchange',()=>{closeDevicePanels();syncMobileViewport();setTimeout(()=>routeScene.resize(),160);});
+addEventListener('orientationchange',()=>{closeDevicePanels();setMetricsPanel(false);setViewPanel(false);syncMobileViewport();setTimeout(()=>routeScene.resize(),160);});
 window.visualViewport?.addEventListener('resize',()=>{syncMobileViewport();routeScene.resize();if(cirRoot?.classList.contains('open'))fitCirFrame();});
 window.visualViewport?.addEventListener('scroll',syncMobileViewport);
 addEventListener('pointerup',stopHorn,true);addEventListener('pointercancel',stopHorn,true);addEventListener('blur',()=>stopHorn());addEventListener('pagehide',()=>stopHorn());document.addEventListener('visibilitychange',()=>{if(document.hidden)stopHorn();});
 $('#stage').addEventListener('click',(event)=>{if(selectedView!=='front'||document.body.classList.contains('device-panel-active')||document.body.classList.contains('switch-panel-active'))return;if(routeScene.hitTestDepartureSignal(event.clientX,event.clientY))openSignalInspection();});
-document.querySelectorAll('[data-view]').forEach(b=>b.addEventListener('click',()=>setView(b.dataset.view)));buildSwitchPanel();buildLkj();buildTrainingControls();buildKeys();bindDrag();bindControlDrawers();setView('front');sim.onChange(render);let last=performance.now();function loop(now){const dt=Math.min(.05,(now-last)/1000);sim.tick(dt,selectedView);updateCirPressure(dt);routeScene.render();last=now;requestAnimationFrame(loop)}requestAnimationFrame(loop);
+document.querySelectorAll('[data-view]').forEach(b=>b.addEventListener('click',()=>{setMetricsPanel(false);setViewPanel(false);setView(b.dataset.view);}));buildSwitchPanel();buildLkj();buildTrainingControls();buildKeys();bindDrag();bindControlDrawers();bindMetricsPanel();bindViewPanel();setMetricsPanel(false);setViewPanel(false);setView('front');sim.onChange(render);let last=performance.now();function loop(now){const dt=Math.min(.05,(now-last)/1000);sim.tick(dt,selectedView);updateCirPressure(dt);routeScene.render();last=now;requestAnimationFrame(loop)}requestAnimationFrame(loop);
 

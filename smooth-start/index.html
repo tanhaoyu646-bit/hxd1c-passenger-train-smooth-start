@@ -7,8 +7,8 @@
   <meta name="mobile-web-app-capable" content="yes">
   <base href="../">
   <title>K2026次旅客列车平稳起动专项</title>
-  <link rel="stylesheet" href="./styles/smooth-start.css?rev=start-scoring-v25">
-  <link rel="stylesheet" href="./styles/credential-training.css?rev=start-scoring-v25">
+  <link rel="stylesheet" href="./styles/smooth-start.css?rev=mobile-controls-v26">
+  <link rel="stylesheet" href="./styles/credential-training.css?rev=mobile-controls-v26">
 </head>
 <body data-training-app="smooth">
   <div id="landscape-gate" class="landscape-gate" hidden aria-modal="true" role="dialog">
@@ -28,14 +28,16 @@
         <img id="cab" class="cab-layer" src="./assets/archive-cabview/HXD1C_front.png" alt="HXD1C驾驶台功能载体">
         <div id="overlay" class="overlay"></div>
         <div class="stage-toolbar">
-          <button id="workflow-toggle" type="button" aria-controls="workflow-drawer">专项流程 <b data-workflow-progress>0/9</b></button>
+          <button id="workflow-toggle" type="button" aria-controls="workflow-drawer">专项流程 <b data-workflow-progress>0/8</b></button>
           <button id="training-toggle" type="button" aria-controls="training-drawer">教学考评与坡道</button>
+          <button id="view-toggle" class="view-toggle" type="button" aria-controls="mobile-view-tabs" aria-expanded="false">视角</button>
+          <button id="metrics-toggle" class="metrics-toggle" type="button" aria-controls="smooth-training-panel" aria-expanded="false">运行数据</button>
         </div>
         <div class="coach-progress" aria-label="全列起动进度"><span id="coach-progress"></span><b>全列起动</b></div>
         <button id="exit-immersive" class="mobile-fullscreen-exit" type="button" aria-label="退出全屏">×</button>
       </div>
 
-      <nav class="view-tabs tabs" aria-label="驾驶室观察视角">
+      <nav id="mobile-view-tabs" class="view-tabs tabs" aria-label="驾驶室观察视角">
         <button type="button" data-view="front" class="active">正面驾驶台</button>
         <button type="button" data-view="left">左侧窗</button>
         <button type="button" data-view="right">右侧窗</button>
@@ -45,7 +47,7 @@
 
       <div id="hint" class="hint" aria-live="polite">先选择教学或考评模式，再选择平道或上坡道起动。</div>
 
-      <section class="smooth-training" aria-label="平稳起动核心训练">
+      <section id="smooth-training-panel" class="smooth-training" aria-label="平稳起动核心训练">
         <div class="smooth-training-head"><div><strong>平稳起动核心训练</strong><span>全列起动后再加速</span></div><small>上坡道须建立牵引后再缓解单阀，防止后溜</small></div>
         <div class="dynamic-strip" aria-label="平稳起动动态状态">
           <div><span>速度</span><b id="metric-speed">0.0 km/h</b></div>
@@ -76,6 +78,6 @@
   </main>
 
   <button id="workflow-scrim" class="drawer-backdrop workflow-scrim" type="button" aria-label="关闭侧栏"></button>
-  <script type="module" src="./scripts/archive-2d-cabview-real-route.js?rev=start-scoring-v25"></script>
+  <script type="module" src="./scripts/archive-2d-cabview-real-route.js?rev=mobile-controls-v26"></script>
 </body>
 </html>
