@@ -1,4 +1,4 @@
-import { TRAIN_DYNAMICS } from './scenario.js?rev=smooth-start-v14-lkj-integration';
+import { TRAIN_DYNAMICS } from './scenario.js?rev=split-pages-mobile-v23';
 
 const scenarioSignalReady = (s) => s.scenarioId === 'weather'
   ? s.locomotiveSignalObserved

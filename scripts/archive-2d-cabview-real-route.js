@@ -1,7 +1,7 @@
-import { TrainSimulation } from './dynamics.js?rev=smooth-start-v19-cir-incoming-clickfix';
-import { getProcedure, procedureState, scoreRun } from './procedure.js?rev=split-pages-mobile-v21';
+import { TrainSimulation } from './dynamics.js?rev=split-pages-mobile-v23';
+import { getProcedure, procedureState, scoreRun } from './procedure.js?rev=split-pages-mobile-v23';
 import { MstsRouteScene } from './mstsRouteScene.js?rev=smooth-start-v19-cir-incoming-clickfix';
-import { LKJ_FIELD_DEFINITIONS, LKJ_TRAINING_PARAMETERS, RUNNING_NOTICES, SIGNAL_ASPECTS, TRAIN_DYNAMICS, SMOOTH_START_TERRAINS, getSmoothStartTerrain } from './scenario.js?rev=split-pages-mobile-v21';
+import { LKJ_FIELD_DEFINITIONS, LKJ_TRAINING_PARAMETERS, RUNNING_NOTICES, SIGNAL_ASPECTS, TRAIN_DYNAMICS, SMOOTH_START_TERRAINS, getSmoothStartTerrain } from './scenario.js?rev=split-pages-mobile-v23';
 import { SCENARIOS, ROUTE_CONTEXT, getScenario, scenarioAudioPath } from './credentialScenario.js?rev=smooth-start-v19-cir-incoming-clickfix';
 
 const $ = (q) => document.querySelector(q);

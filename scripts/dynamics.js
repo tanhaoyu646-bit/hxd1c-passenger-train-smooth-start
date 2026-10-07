@@ -1,4 +1,4 @@
-import { LKJ_TRAINING_PARAMETERS, SIGNAL_ASPECTS, TRAIN_DYNAMICS, getLkjMismatchFields, getSmoothStartTerrain } from './scenario.js?rev=split-pages-mobile-v21';
+import { LKJ_TRAINING_PARAMETERS, SIGNAL_ASPECTS, TRAIN_DYNAMICS, getLkjMismatchFields, getSmoothStartTerrain } from './scenario.js?rev=split-pages-mobile-v23';
 import { getScenario, ROUTE_CONTEXT } from './credentialScenario.js?rev=lkj-cir-gauge-alignment-v1-20260928';
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
