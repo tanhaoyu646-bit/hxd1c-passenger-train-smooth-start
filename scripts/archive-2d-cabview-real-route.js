@@ -1,11 +1,13 @@
 import { TrainSimulation } from './dynamics.js?rev=smooth-start-v19-cir-incoming-clickfix';
-import { PROCEDURE, procedureState, scoreRun } from './procedure.js?rev=smooth-start-v19-cir-incoming-clickfix';
+import { getProcedure, procedureState, scoreRun } from './procedure.js?rev=split-pages-mobile-v21';
 import { MstsRouteScene } from './mstsRouteScene.js?rev=smooth-start-v19-cir-incoming-clickfix';
-import { LKJ_FIELD_DEFINITIONS, LKJ_TRAINING_PARAMETERS, RUNNING_NOTICES, SIGNAL_ASPECTS, TRAIN_DYNAMICS } from './scenario.js?rev=smooth-start-v19-cir-incoming-clickfix';
+import { LKJ_FIELD_DEFINITIONS, LKJ_TRAINING_PARAMETERS, RUNNING_NOTICES, SIGNAL_ASPECTS, TRAIN_DYNAMICS, SMOOTH_START_TERRAINS, getSmoothStartTerrain } from './scenario.js?rev=split-pages-mobile-v21';
 import { SCENARIOS, ROUTE_CONTEXT, getScenario, scenarioAudioPath } from './credentialScenario.js?rev=smooth-start-v19-cir-incoming-clickfix';
 
 const $ = (q) => document.querySelector(q);
 const sim = new TrainSimulation();
+const TRAINING_APP = document.body.dataset.trainingApp === 'smooth' ? 'smooth' : 'departure';
+if (TRAINING_APP === 'smooth') sim.state.trainingScope = 'smooth-only';
 const overlay = $('#overlay');
 const routeCanvas = $('#route-scene');
 const routeScene = new MstsRouteScene(routeCanvas);
@@ -606,11 +608,17 @@ function openDeliveredCredential(){
 }
 function buildTrainingControls(){
   const root=$('#training-controls');if(!root)return;
-  root.innerHTML=`<div class="training-section-label">训练范围</div><div class="training-row scope-row"><button type="button" data-scope="complete">完整发车作业</button><button type="button" data-scope="smooth-only">平稳起动专项</button></div><div class="training-section-label">教学方式</div><div class="training-row mode-row"><button type="button" data-mode="teaching">教学模式</button><button type="button" data-mode="assessment">考评模式</button></div><div class="training-section-label">场景</div><div class="training-row scenario-row">${Object.values(SCENARIOS).map((scenario)=>`<button type="button" data-scenario="${scenario.id}">${scenario.shortLabel}</button>`).join('')}</div><p class="equipment-local-note">完整训练从初始位置开始；专项训练在选择场景后预置发车条件，学生仍须缓解停放制动并完成平稳起动。信号、LKJ、CIR及凭证均在驾驶台设备上操作。</p><p class="initial-check-state" data-initial-state>请在驾驶台逐项核对初始位置。</p><div class="initial-check-grid" data-initial-grid>${INITIAL_CHECKS.map(([key,label,target])=>`<button type="button" class="initial-check-card pending" data-initial-card="${key}"><b>${label}</b><span>${target} · 未核对</span></button>`).join('')}</div><div class="training-row"><button type="button" data-training="initial">提交初始位置核对</button></div><p class="training-state" data-training-state></p>`;
+  const choices=TRAINING_APP==='smooth'
+    ? Object.values(SMOOTH_START_TERRAINS).map((terrain)=>`<button type="button" data-terrain="${terrain.id}">${terrain.shortLabel}</button>`).join('')
+    : Object.values(SCENARIOS).map((scenario)=>`<button type="button" data-scenario="${scenario.id}">${scenario.shortLabel}</button>`).join('');
+  const note=TRAINING_APP==='smooth'
+    ? '专项仅训练平道与上坡道起动。平道以1级建立牵引；上坡道由单阀保持，2级建立牵引后再逐步缓解，防止后溜。'
+    : '完整训练从设备初始位置开始，包含正常、天气恶劣、绿色许可证和路票四类发车场景。';
+  root.innerHTML=`<div class="training-section-label">教学方式</div><div class="training-row mode-row"><button type="button" data-mode="teaching">教学模式</button><button type="button" data-mode="assessment">考评模式</button></div><div class="training-section-label">${TRAINING_APP==='smooth'?'线路条件':'发车场景'}</div><div class="training-row scenario-row">${choices}</div><p class="equipment-local-note">${note}</p><p class="initial-check-state" data-initial-state>请在驾驶台逐项核对初始位置。</p><div class="initial-check-grid" data-initial-grid>${INITIAL_CHECKS.map(([key,label,target])=>`<button type="button" class="initial-check-card pending" data-initial-card="${key}"><b>${label}</b><span>${target} · 未核对</span></button>`).join('')}</div><div class="training-row"><button type="button" data-training="initial">提交初始位置核对</button></div><p class="training-state" data-training-state></p>`;
   root.querySelector('[data-training="initial"]').addEventListener('click',()=>command('initial-confirm'));
   root.querySelectorAll('[data-mode]').forEach(b=>b.addEventListener('click',()=>command('training-mode',b.dataset.mode)));
-  root.querySelectorAll('[data-scope]').forEach(b=>b.addEventListener('click',()=>command('training-scope',b.dataset.scope)));
   root.querySelectorAll('[data-scenario]').forEach(b=>b.addEventListener('click',()=>command('scenario-select',b.dataset.scenario)));
+  root.querySelectorAll('[data-terrain]').forEach(b=>b.addEventListener('click',()=>command('terrain-select',b.dataset.terrain)));
   root.querySelectorAll('[data-initial-card]').forEach((card)=>card.addEventListener('click',()=>focusInitialCheck(card.dataset.initialCard)));
   syncTrainingControls(sim.state);
 }
@@ -626,12 +634,12 @@ function syncTrainingControls(state){
   const root=$('#training-controls');if(!root)return;const initialButton=root.querySelector('[data-training="initial"]');initialButton.classList.toggle('active',state.initialConfirmed);
   const specialty=state.trainingScope==='smooth-only';root.querySelector('[data-initial-grid]').hidden=specialty;initialButton.parentElement.hidden=specialty;
   const checked=INITIAL_CHECKS.filter(([key])=>state.initialChecks?.[key]).length;initialButton.disabled=state.trainingMode==='teaching'&&!state.initialConfirmed&&checked<INITIAL_CHECKS.length;root.querySelector('[data-initial-state]').textContent=state.initialConfirmed?'8项设备初始位置均已完成核对。':state.trainingMode==='assessment'&&state.initialAttempted?`初始位置核对已提交：已核对 ${checked}/${INITIAL_CHECKS.length}，结果将在本次成绩中显示。`:`初始位置已核对 ${checked}/${INITIAL_CHECKS.length}：点击方框可定位设备，实际在驾驶台完成核对。`;
-  if(specialty)root.querySelector('[data-initial-state]').textContent=state.scenarioSelected?'专项训练前置条件已建立：请在驾驶台缓解停放制动后，由牵引低级位平稳起动。':'选择场景后将自动建立专项训练前置条件。';
+  if(specialty){const terrain=getSmoothStartTerrain(state.terrainMode||'level');root.querySelector('[data-initial-state]').textContent=state.terrainSelected?`${terrain.label}前置条件已建立：${terrain.note}`:'请选择平道或上坡道，系统将建立对应起动条件。';}
   for(const [key,label,target] of INITIAL_CHECKS){const card=root.querySelector(`[data-initial-card="${key}"]`);if(!card)continue;const checkedNow=Boolean(state.initialChecks?.[key]);const correct=sim.initialCheckIsCorrect(key);card.classList.remove('pending','current','done','warning');if(checkedNow&&correct){card.classList.add('done');card.querySelector('span').textContent=`${target} · 已核对`;}else if(state.trainingMode==='teaching'&&!correct){card.classList.add('warning');card.querySelector('span').textContent=`${target} · 请调整`;}else if(checked===INITIAL_CHECKS.length&&state.trainingMode==='teaching'){card.classList.add('current');card.querySelector('span').textContent=`${target} · 待复核`;}else{card.classList.add('pending');card.querySelector('span').textContent=state.trainingMode==='assessment'&&checkedNow?`${target} · 已操作`:`${target} · 未核对`;}}
   root.querySelectorAll('[data-mode]').forEach(b=>b.classList.toggle('active',b.dataset.mode===state.trainingMode));
-  root.querySelectorAll('[data-scope]').forEach(b=>b.classList.toggle('active',b.dataset.scope===state.trainingScope));
   root.querySelectorAll('[data-scenario]').forEach(b=>b.classList.toggle('active',b.dataset.scenario===state.scenarioId&&state.scenarioSelected));
-  const scenario=getScenario(state.scenarioId);root.querySelector('[data-training-state]').textContent=`当前：${state.trainingScope==='smooth-only'?'平稳起动专项':'完整发车作业'} · ${state.trainingMode==='teaching'?'教学':'考评'}模式 · ${state.scenarioSelected?scenario.label:'未选择场景'}${state.authority?' · 行车凭证已确认':''}`;
+  root.querySelectorAll('[data-terrain]').forEach(b=>b.classList.toggle('active',b.dataset.terrain===state.terrainMode&&state.terrainSelected));
+  const scenario=getScenario(state.scenarioId);const selection=specialty?(state.terrainSelected?getSmoothStartTerrain(state.terrainMode).label:'未选择线路条件'):(state.scenarioSelected?scenario.label:'未选择场景');root.querySelector('[data-training-state]').textContent=`当前：${specialty?'平稳起动专项':'完整发车作业'} · ${state.trainingMode==='teaching'?'教学':'考评'}模式 · ${selection}${!specialty&&state.authority?' · 行车凭证已确认':''}`;
 }
 function buildResultReport(){
   const root=document.createElement('div');root.className='device-modal result-modal';root.setAttribute('aria-hidden','true');
@@ -640,7 +648,7 @@ function buildResultReport(){
 }
 function showResultReport(state){
   if(state.trainingMode!=='assessment'||resultShown)return;if(!resultRoot)buildResultReport();const score=scoreRun(state);const p=procedureState(state);
-  resultRoot.querySelector('[data-result-score]').textContent=score.score;resultRoot.querySelector('[data-result-summary]').textContent=`完成 ${score.completed}/${PROCEDURE.length} 个作业项点${score.deductions?`，操作扣分 ${score.deductions} 分`:'，无操作扣分'}。`;
+  resultRoot.querySelector('[data-result-score]').textContent=score.score;resultRoot.querySelector('[data-result-summary]').textContent=`完成 ${score.completed}/${getProcedure(state).length} 个作业项点${score.deductions?`，操作扣分 ${score.deductions} 分`:'，无操作扣分'}。`;
   resultRoot.querySelector('[data-result-items]').innerHTML=score.itemScores.map((item)=>`<li class="${item.correct?'pass':'fail'}"><span>${item.label}${item.locked?'（动车时未完成，已锁定失分）':item.earned>0&&!item.correct?'（部分完成）':item.complete&&!item.correct?'（操作或核对错误）':''}</span><b>${item.earned}/${item.weight}</b></li>`).join('');resultRoot.classList.add('open');resultRoot.setAttribute('aria-hidden','false');document.body.classList.add('device-panel-active');resultShown=true;
 }
 function closeDevicePanels(){closeSwitchPanel();closePowerCabinet();closeLkj();closeSignalInspection();closeCredentialModal();closeCir();if(hornPointerId!==null)stopHorn();else{hornAudio.pause();hornAudio.currentTime=0;if(sim.state.hornActive)command('horn-stop');}}
@@ -741,7 +749,7 @@ function render(state,message='') {
   }
   renderSignalInspection(state);renderCredentialModal(state);renderCirWorkflow();syncTrainingControls(state);
   const assessmentFinished=state.trainingMode==='assessment'&&state.completed;if(!assessmentFinished)resultShown=false;
-  const p=procedureState(state); $('#procedure').innerHTML=PROCEDURE.map(([n],i)=>`<li class="${p.complete[i]?'done':i===p.current?'active':''}">${n}</li>`).join(''); const score=scoreRun(state); const aspect=SIGNAL_ASPECTS[state.signalAspect];const scenario=getScenario(state.scenarioId); $('#status').innerHTML=`<strong>状态：</strong>${state.completed?'训练完成':'第 '+(p.current+1)+' 步'}<br>场景 ${state.scenarioSelected?scenario.label:'未选择场景'} · 凭证 ${state.scenarioSelected?scenario.credential:'—'}<br>总风 ${state.mainRes.toFixed(0)} kPa · 制动缸 ${state.brakeCyl.toFixed(0)} kPa · 停放制动 ${state.parkingBrake?'施加':'缓解'}<br>地面信号 ${aspect.label}${state.authority?' · 行车凭证已确认':''}<br>LKJ ${state.lkjStartCorrect?'已开车对标':state.lkjStartAttempted?'开车对标待复核':`距对标点 ${Math.max(0,Math.round(ROUTE_CONTEXT.departureSignalDistance-state.distance))} m`}<br>速度 ${state.speed.toFixed(1)} km/h · 全列起动 ${Math.round(state.wholeTrainStartFraction*100)}% · 当前得分 ${score.score}${score.deductions?` · 扣分 ${score.deductions}`:''}`; const workflowProgress=$('[data-workflow-progress]');if(workflowProgress)workflowProgress.textContent=`${p.complete.filter(Boolean).length}/${PROCEDURE.length}`; renderSmoothStartPanel(state); if(message)$('#hint').textContent=message;if(p.done||assessmentFinished)showResultReport(state);
+  const p=procedureState(state);const procedure=getProcedure(state); $('#procedure').innerHTML=procedure.map(([n],i)=>`<li class="${p.complete[i]?'done':i===p.current?'active':''}">${n}</li>`).join(''); const score=scoreRun(state); const aspect=SIGNAL_ASPECTS[state.signalAspect];const scenario=getScenario(state.scenarioId);const context=state.trainingScope==='smooth-only'?(state.terrainSelected?getSmoothStartTerrain(state.terrainMode).label:'未选择线路条件'):(state.scenarioSelected?scenario.label:'未选择场景'); $('#status').innerHTML=`<strong>状态：</strong>${state.completed?'训练完成':'第 '+(p.current+1)+' 步'}<br>场景 ${context}${state.trainingScope==='complete'?` · 凭证 ${state.scenarioSelected?scenario.credential:'—'}`:''}<br>总风 ${state.mainRes.toFixed(0)} kPa · 制动缸 ${state.brakeCyl.toFixed(0)} kPa · 停放制动 ${state.parkingBrake?'施加':'缓解'}<br>${state.trainingScope==='smooth-only'?`坡度 ${getSmoothStartTerrain(state.terrainMode).gradePermille}‰ · ${state.rollbackRisk?'存在后溜风险':'保持状态正常'}`:`地面信号 ${aspect.label}${state.authority?' · 行车凭证已确认':''}`}<br>${state.trainingScope==='smooth-only'?'专项不考核LKJ开车对标':`LKJ ${state.lkjStartCorrect?'已开车对标':state.lkjStartAttempted?'开车对标待复核':`距对标点 ${Math.max(0,Math.round(ROUTE_CONTEXT.departureSignalDistance-state.distance))} m`}`}<br>速度 ${state.speed.toFixed(1)} km/h · 全列起动 ${Math.round(state.wholeTrainStartFraction*100)}% · 当前得分 ${score.score}${score.deductions?` · 扣分 ${score.deductions}`:''}`; const workflowProgress=$('[data-workflow-progress]');if(workflowProgress)workflowProgress.textContent=`${p.complete.filter(Boolean).length}/${procedure.length}`; renderSmoothStartPanel(state); if(message)$('#hint').textContent=message;if(p.done||assessmentFinished)showResultReport(state);
 }
 
 function renderSmoothStartPanel(state){
@@ -753,9 +761,18 @@ function renderSmoothStartPanel(state){
   const acceleration=Math.abs(state.currentAcceleration||0);const jerk=Math.abs(state.currentJerk||0);
   setText('#metric-acceleration',acceleration<=TRAIN_DYNAMICS.comfort.warningAcceleration?'平稳':'偏大');
   setText('#metric-jerk',jerk<=TRAIN_DYNAMICS.comfort.warningJerk?'正常':'过大');
-  setText('#metric-lkj',state.lkjStartCorrect?'已对标':`${Math.max(0,Math.round(ROUTE_CONTEXT.departureSignalDistance-state.distance))} m`);
+  const specialty=state.trainingScope==='smooth-only';const terrain=getSmoothStartTerrain(state.terrainMode||'level');
+  setText('#metric-context-label',specialty?'线路坡度':'LKJ对标距离');
+  setText('#metric-lkj',specialty?`${terrain.gradePermille}‰`:(state.lkjStartCorrect?'已对标':`${Math.max(0,Math.round(ROUTE_CONTEXT.departureSignalDistance-state.distance))} m`));
   const guide=$('#smooth-guide');if(!guide)return;
-  const items=[
+  const items=specialty?[
+    [terrain.id==='uphill'?'2级建立牵引':'1级低级位加载',state.lowNotchApplied,state.lowNotchApplied?'初始牵引已建立':terrain.note],
+    [terrain.id==='uphill'?'逐步缓解单阀':'保持低级位',terrain.id==='uphill'?state.hillHoldReleasedCorrectly:state.lowNotchHeld,terrain.id==='uphill'?(state.hillHoldReleasedCorrectly?'保持力交接正确':'牵引建立前保持单阀制动'):(state.lowNotchHeld?'牵引力稳定建立':'暂勿继续加级')],
+    ['全列依次起动',state.wholeTrainStarted,`${startedCars}/${state.consistCars||12}辆`],
+    ['后部瞭望确认',state.rearLookCompleted,state.rearLookCompleted?'已确认':'使用左后或右后瞭望'],
+    ['逐级增加牵引',state.progressiveTraction,state.wholeTrainStarted?'每次增加一级':'全列起动后解锁'],
+    ['低速平稳加速',state.smoothStartQualified,state.smoothStartQualified?'起动平稳合格':'保持5～15 km/h并控制冲动'],
+  ]:[
     ['低级位加载',state.lowNotchApplied,state.lowNotchApplied?'已置1～2级':'由零位推至1～2级'],
     ['保持低级位',state.lowNotchHeld,state.lowNotchHeld?'牵引力稳定建立':'暂勿继续加级'],
     ['全列依次起动',state.wholeTrainStarted,`${startedCars}/${state.consistCars||12}辆`],
@@ -788,9 +805,18 @@ function bindControlDrawers(){
   $('#workflow-scrim')?.addEventListener('click',()=>setControlDrawer());
   addEventListener('keydown',(event)=>{if(event.key==='Escape')setControlDrawer();});
 }
-const mobileLike=matchMedia('(pointer: coarse)').matches||matchMedia('(max-height:600px) and (orientation:landscape)').matches||navigator.maxTouchPoints>0||/Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+const mobileLike=matchMedia('(pointer: coarse)').matches||matchMedia('(max-width:620px)').matches||matchMedia('(max-height:600px) and (orientation:landscape)').matches||navigator.maxTouchPoints>0||/Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
 if(mobileLike)document.body.classList.add('mobile-controls-enabled');
+let mobileEntered=!mobileLike;
+function syncMobileViewport(){
+  const viewport=window.visualViewport;const root=document.documentElement;
+  root.style.setProperty('--visual-height',`${Math.round(viewport?.height||innerHeight)}px`);
+  root.style.setProperty('--visual-offset-top',`${Math.round(viewport?.offsetTop||0)}px`);
+  if(mobileLike&&!mobileEntered)$('#landscape-gate').hidden=false;
+}
+syncMobileViewport();
 async function enterImmersive(){
+  mobileEntered=true;
   document.documentElement.classList.add('immersive');
   $('#landscape-gate').hidden=true;
   try{const root=document.documentElement;if(root.requestFullscreen)await root.requestFullscreen({navigationUI:'hide'});else if(root.webkitRequestFullscreen)await root.webkitRequestFullscreen();}catch{ /* iPhone Safari 常拒绝普通网页全屏，CSS 沉浸模式继续生效。 */ }
@@ -806,8 +832,9 @@ async function exitImmersive(){
 $('#enter-training').addEventListener('click',enterImmersive);
 $('#exit-immersive').addEventListener('click',exitImmersive);
 addEventListener('fullscreenchange',()=>{if(!document.fullscreenElement&&document.documentElement.classList.contains('immersive')&&!mobileLike)document.documentElement.classList.remove('immersive');routeScene.resize();});
-addEventListener('orientationchange',()=>{closeDevicePanels();setTimeout(()=>routeScene.resize(),160);});
-window.visualViewport?.addEventListener('resize',()=>{routeScene.resize();if(cirRoot?.classList.contains('open'))fitCirFrame();});
+addEventListener('orientationchange',()=>{closeDevicePanels();syncMobileViewport();setTimeout(()=>routeScene.resize(),160);});
+window.visualViewport?.addEventListener('resize',()=>{syncMobileViewport();routeScene.resize();if(cirRoot?.classList.contains('open'))fitCirFrame();});
+window.visualViewport?.addEventListener('scroll',syncMobileViewport);
 addEventListener('pointerup',stopHorn,true);addEventListener('pointercancel',stopHorn,true);addEventListener('blur',()=>stopHorn());addEventListener('pagehide',()=>stopHorn());document.addEventListener('visibilitychange',()=>{if(document.hidden)stopHorn();});
 $('#stage').addEventListener('click',(event)=>{if(selectedView!=='front'||document.body.classList.contains('device-panel-active')||document.body.classList.contains('switch-panel-active'))return;if(routeScene.hitTestDepartureSignal(event.clientX,event.clientY))openSignalInspection();});
 document.querySelectorAll('[data-view]').forEach(b=>b.addEventListener('click',()=>setView(b.dataset.view)));buildSwitchPanel();buildLkj();buildTrainingControls();buildKeys();bindDrag();bindControlDrawers();setView('front');sim.onChange(render);let last=performance.now();function loop(now){const dt=Math.min(.05,(now-last)/1000);sim.tick(dt,selectedView);updateCirPressure(dt);routeScene.render();last=now;requestAnimationFrame(loop)}requestAnimationFrame(loop);

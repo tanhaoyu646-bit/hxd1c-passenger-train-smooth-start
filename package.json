@@ -3,6 +3,6 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "check": "node --check scripts/credentialScenario.js && node --check scripts/scenario.js && node --check scripts/dynamics.js && node --check scripts/procedure.js && node --check scripts/mstsRouteScene.js && node --check scripts/archive-2d-cabview-real-route.js && node tools/test-training-scenarios.mjs && node tools/test-interface-assets.mjs"
+    "check": "node --check scripts/credentialScenario.js && node --check scripts/scenario.js && node --check scripts/dynamics.js && node --check scripts/procedure.js && node --check scripts/mstsRouteScene.js && node --check scripts/archive-2d-cabview-real-route.js && node tools/test-training-scenarios.mjs && node tools/test-interface-assets.mjs && node tools/test-split-pages.mjs"
   }
 }

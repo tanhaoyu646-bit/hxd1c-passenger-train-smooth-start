@@ -45,10 +45,29 @@ export const PROCEDURE = [
   ['越过出站信号机后稳定运行300 m', s => s.completed, 4],
 ];
 
+export const SMOOTH_PROCEDURE = [
+  ['选择平道或上坡道起动场景', s => s.terrainSelected, 5],
+  ['按场景建立起动保持条件并缓解停放制动', s => !s.parkingBrake, 10],
+  ['按坡道要求建立初始牵引并缓解单阀', s => s.terrainMode === 'uphill'
+    ? s.hillHoldReleasedCorrectly && s.independentBrake === 0
+    : s.independentBrake === 0, 10],
+  ['牵引手柄由零位推至规定低级位', s => s.lowNotchApplied, 15],
+  ['保持低级位，等待牵引力向全列传递', s => s.lowNotchHeld, 15],
+  ['确认全列12辆车辆依次起动', s => s.wholeTrainStarted, 15],
+  ['左后或右后瞭望确认全列移动', s => s.rearLookCompleted, 10],
+  ['全列起动后逐级增加牵引', s => s.progressiveTraction, 10],
+  ['速度5～15 km/h时保持平稳加速', s => s.smoothStartQualified, 10],
+];
+
+export function getProcedure(state) {
+  return state?.trainingScope === 'smooth-only' ? SMOOTH_PROCEDURE : PROCEDURE;
+}
+
 export function procedureState(state) {
-  const complete = PROCEDURE.map(([, test]) => Boolean(test(state)));
+  const procedure = getProcedure(state);
+  const complete = procedure.map(([, test]) => Boolean(test(state)));
   const current = complete.findIndex((done) => !done);
-  return { complete, current: current < 0 ? PROCEDURE.length - 1 : current, done: complete.every(Boolean) };
+  return { complete, current: current < 0 ? procedure.length - 1 : current, done: complete.every(Boolean) };
 }
 function preDepartureStepEarned(state) {
   const locked = new Set(state.assessmentCredentialLocks || []);
@@ -75,8 +94,13 @@ function departureAuthorizationStepEarned(state) {
 
 export function scoreRun(state) {
   const p = procedureState(state);
+  const procedure = getProcedure(state);
   const scoreLocks = new Set(state.assessmentScoreLocks || []);
-  const itemScores = PROCEDURE.map(([label, workflowTest, weight, scoreTest = workflowTest], index) => {
+  const itemScores = procedure.map(([label, workflowTest, weight, scoreTest = workflowTest], index) => {
+    if (state.trainingScope === 'smooth-only') {
+      const earned = scoreTest(state) ? weight : 0;
+      return { label, weight, complete: Boolean(workflowTest(state)), correct: earned === weight, earned, locked: false };
+    }
     const rawEarned = index === 6
       ? preDepartureStepEarned(state)
       : index === 8
@@ -97,6 +121,7 @@ export function scoreRun(state) {
     state.rejected * 2
     + state.abrupt * 2
     + (state.prematureAcceleration ? 6 : 0)
+    + (state.rollbackRisk ? 8 : 0)
     + (state.maxAcceleration > TRAIN_DYNAMICS.comfort.severeAcceleration ? 4 : 0)
     + (state.maxJerk > TRAIN_DYNAMICS.comfort.severeJerk ? 4 : 0));
   return { score: Math.max(0, Math.min(100, base - deductions)), completed: p.complete.filter(Boolean).length, deductions, itemScores };
