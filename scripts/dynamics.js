@@ -826,3 +826,4 @@ export class TrainSimulation {
     this.emit();
   }
 }
+

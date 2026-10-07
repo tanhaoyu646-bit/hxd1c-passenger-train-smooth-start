@@ -58,3 +58,4 @@ npm run check
 - 来源项目：`publish-hxd1c-running-credential-confirmation-pages`
 
 如后续版本不理想，可在本项目内回滚到标签 `smooth-start-prototype-v1`；该操作不涉及来源项目。
+

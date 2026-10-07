@@ -126,3 +126,4 @@ export function scoreRun(state) {
     + (state.maxJerk > TRAIN_DYNAMICS.comfort.severeJerk ? 4 : 0));
   return { score: Math.max(0, Math.min(100, base - deductions)), completed: p.complete.filter(Boolean).length, deductions, itemScores };
 }
+
