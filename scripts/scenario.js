@@ -82,6 +82,33 @@ export const TRAIN_DYNAMICS = {
   },
 };
 
+// 平稳起动专项只比较线路纵断面，不混入天气或行车凭证场景。
+// 坡度与阈值均为课堂等效标定，用来体现操纵差异，不作为线路实测数据。
+export const SMOOTH_START_TERRAINS = Object.freeze({
+  level: Object.freeze({
+    id: 'level',
+    label: '平道起动',
+    shortLabel: '平道',
+    gradePermille: 0,
+    requiredStartNotch: 1,
+    initialIndependentBrake: 0,
+    note: '大小闸与停放制动全部缓解后，以1级建立牵引；必要时用2级，全列起动前保持低级位。',
+  }),
+  uphill: Object.freeze({
+    id: 'uphill',
+    label: '上坡道起动',
+    shortLabel: '上坡道',
+    gradePermille: 4,
+    requiredStartNotch: 2,
+    initialIndependentBrake: 2,
+    note: '先由单阀保持机车制动并缓解停放制动，牵引置2级建立牵引力，再逐步缓解单阀，防止后溜。',
+  }),
+});
+
+export function getSmoothStartTerrain(id) {
+  return SMOOTH_START_TERRAINS[id] || SMOOTH_START_TERRAINS.level;
+}
+
 export const RUNNING_NOTICES = [
   '株洲站 1 道出发，运行方向：七斗冲方向。',
   '本次为 K2026 次教学编组，采用 HXD1C 驾驶台功能载体。',
@@ -99,3 +126,4 @@ export function getLkjMismatchFields(input = {}) {
     .filter(([key, value]) => String(input[key] ?? '').trim() !== value)
     .map(([key]) => key);
 }
+

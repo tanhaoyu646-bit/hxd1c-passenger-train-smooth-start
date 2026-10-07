@@ -1,4 +1,4 @@
-import { LKJ_TRAINING_PARAMETERS, SIGNAL_ASPECTS, TRAIN_DYNAMICS, getLkjMismatchFields } from './scenario.js?rev=smooth-start-v14-lkj-integration';
+import { LKJ_TRAINING_PARAMETERS, SIGNAL_ASPECTS, TRAIN_DYNAMICS, getLkjMismatchFields, getSmoothStartTerrain } from './scenario.js?rev=split-pages-mobile-v21';
 import { getScenario, ROUTE_CONTEXT } from './credentialScenario.js?rev=lkj-cir-gauge-alignment-v1-20260928';
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
@@ -35,6 +35,7 @@ export class TrainSimulation {
       parkingBrake: true, authority: false, trainingMode: 'teaching', trainingScope: 'complete', signalAspect: 'green', signalObserved: false, signalAnswer: null,
       signalMeaningCorrect: false, handSignalRequired: true, handSignalConfirmed: false,
       scenarioId: 'normal', scenarioSelected: false, credentialStage: 'select',
+      terrainMode: '', terrainSelected: false, hillHoldReleasedCorrectly: false, rollbackRisk: false,
       radioContacted: false, radioResponseAttempted: false, radioResponseCorrect: false,
       departureResponseAttempted: false, departureResponseCorrect: false,
       orderSigned: false, credentialPresented: false,
@@ -132,7 +133,7 @@ export class TrainSimulation {
     if (s.lkjUnlockRequired && !s.lkjUnlockFieldsCorrect) this.lockAssessmentCredential('fields', '未正确输入LKJ非正常行车编号即动车');
     if (s.lkjUnlockRequired && !s.lkjUnlockCombinationCorrect) this.lockAssessmentCredential('combination', '未正确完成LKJ解锁组合键即动车');
   }
-  tractionInterlockReasons() {
+  tractionInterlockReasons(requestedTraction = this.state.traction) {
     const s = this.state;
     const reasons = [];
     if (!this.isAssessment() && !s.authority) reasons.push('行车凭证、开车通知或发车手信号尚未正确确认');
@@ -143,8 +144,13 @@ export class TrainSimulation {
     if (s.direction !== 'F') reasons.push('换向手柄未在前进位');
     if (s.parkingBrake) reasons.push('停放制动未缓解');
     if (s.autoBrake > 0) reasons.push('自动制动阀未在运转位');
-    if (s.independentBrake > 0) reasons.push('单独制动阀未在缓解位');
-    if (s.brakeCyl >= TRACTION_BRAKE_CYL_MAX) reasons.push(`制动缸压力仍为 ${Math.ceil(s.brakeCyl)} kPa`);
+    const uphillHoldingStart = s.trainingScope === 'smooth-only'
+      && s.terrainMode === 'uphill'
+      && s.speed < .5
+      && requestedTraction > 0
+      && requestedTraction <= 2;
+    if (s.independentBrake > 0 && !uphillHoldingStart) reasons.push('单独制动阀未在缓解位');
+    if (s.brakeCyl >= TRACTION_BRAKE_CYL_MAX && !uphillHoldingStart) reasons.push(`制动缸压力仍为 ${Math.ceil(s.brakeCyl)} kPa`);
     return reasons;
   }
   syncAuthority() {
@@ -191,7 +197,8 @@ export class TrainSimulation {
     s.releaseObserved = true;
     s.releasePropagation = 1;
     s.autoBrake = 0;
-    s.independentBrake = 0;
+    const terrain = getSmoothStartTerrain(s.terrainMode || 'level');
+    s.independentBrake = terrain.initialIndependentBrake;
     s.tailDeviceId = '202601';
     s.tailDeviceLinked = true;
     s.tailPressureQueried = true;
@@ -286,6 +293,21 @@ export class TrainSimulation {
       this.syncAuthority();
       if (s.trainingScope === 'smooth-only') this.applySmoothStartPreset();
       this.emit(`已选择“${scenario.label}”场景：${scenario.description}`);
+      return true;
+    }
+    if (id === 'terrain-select') {
+      if (!['level', 'uphill'].includes(value)) return this.reject('未识别的平稳起动线路条件。');
+      const mode = s.trainingMode;
+      this.reset();
+      this.state.trainingMode = mode;
+      this.state.trainingScope = 'smooth-only';
+      this.state.scenarioId = 'normal';
+      this.state.scenarioSelected = true;
+      this.state.terrainMode = value;
+      this.state.terrainSelected = true;
+      this.applySmoothStartPreset();
+      const terrain = getSmoothStartTerrain(value);
+      this.emit(`已选择“${terrain.label}”：${terrain.note}`);
       return true;
     }
     if (id === 'tail-link') {
@@ -660,7 +682,7 @@ export class TrainSimulation {
       const previous = s.traction;
       if (next - previous > 1) s.abrupt += 1;
       this.invalidateInitialCheck('traction');
-      const blockers = next > 0 ? this.tractionInterlockReasons() : [];
+      const blockers = next > 0 ? this.tractionInterlockReasons(next) : [];
       if (blockers.length) {
         s.traction = 0;
         s.rejected += 1;
@@ -677,7 +699,8 @@ export class TrainSimulation {
       }
       if (next > 0) this.recordAssessmentDepartureSnapshot();
       s.traction = next;
-      if (next >= 1 && next <= 2) s.lowNotchApplied = true;
+      const terrain = getSmoothStartTerrain(s.terrainMode || 'level');
+      if (next >= terrain.requiredStartNotch && next <= 2) s.lowNotchApplied = true;
       if (s.wholeTrainStarted && next > previous && next - previous === 1) s.progressiveTraction = true;
       this.emit(next > 0 ? `牵引手柄置于 ${next} 级。` : next < 0 ? `电制动置于 ${Math.abs(next)} 级。` : '牵引手柄已回零。'); return true;
     }
@@ -710,18 +733,35 @@ export class TrainSimulation {
     const brakesReleased = s.autoBrake === 0 && s.independentBrake === 0 && s.brakeCyl < TRACTION_BRAKE_CYL_MAX;
     s.releasePropagation += ((brakesReleased ? 1 : 0) - s.releasePropagation) * Math.min(1, dt * (brakesReleased ? .34 : 1.2));
     s.actualTraction += ((s.traction > 0 ? s.traction : 0) - s.actualTraction) * Math.min(1, dt * .72);
-    const tractionAllowed = this.tractionInterlockReasons().length === 0;
+    const tractionAllowed = this.tractionInterlockReasons(s.traction).length === 0;
     s.tractionForce = tractionAllowed && s.actualTraction > 0
       ? Math.min(TRAIN_DYNAMICS.maxStartingTractiveEffortN, s.actualTraction * TRAIN_DYNAMICS.tractionForcePerNotchN) * Math.max(.34, 1 - s.speed / 125)
       : 0;
     const electricBrake = s.traction < 0 ? Math.abs(s.traction) * 43000 : 0;
     const parkingBrakeForce = s.parkingBrake ? 450000 : 0;
     s.brakeForce = s.brakeCyl * 1250 + electricBrake + parkingBrakeForce;
+    const terrain = getSmoothStartTerrain(s.terrainMode || 'level');
+    const gradeResistance = s.trainingScope === 'smooth-only'
+      ? TRAIN_DYNAMICS.totalMassKg * 9.81 * terrain.gradePermille / 1000
+      : 0;
     const resistance = TRAIN_DYNAMICS.baseResistanceN
       + TRAIN_DYNAMICS.linearResistancePerKmh * s.speed
-      + TRAIN_DYNAMICS.quadraticResistancePerKmh2 * s.speed * s.speed;
+      + TRAIN_DYNAMICS.quadraticResistancePerKmh2 * s.speed * s.speed
+      + gradeResistance;
     const acceleration = (s.tractionForce - s.brakeForce - resistance) / TRAIN_DYNAMICS.totalMassKg;
     const actual = s.speed <= 0 && acceleration < 0 ? 0 : acceleration;
+    if (s.trainingScope === 'smooth-only' && s.terrainMode === 'uphill' && s.speed < .12) {
+      const holdingReleased = !s.parkingBrake && s.independentBrake === 0;
+      if (holdingReleased && s.actualTraction < 1.5) {
+        s.rollbackRisk = true;
+        if (!s.assessmentSequenceErrors.includes('上坡起动保持力不足，存在后溜风险')) {
+          s.assessmentSequenceErrors.push('上坡起动保持力不足，存在后溜风险');
+          s.abrupt += 2;
+          this.emit('上坡起动保持力不足：应先以2级建立牵引力，再逐步缓解单阀。');
+        }
+      }
+      if (holdingReleased && s.actualTraction >= 1.5) s.hillHoldReleasedCorrectly = true;
+    }
     const activeLimit = s.lkjUnlockCorrect && s.lkjUnlockLimit > 0 ? s.lkjUnlockLimit : s.limitedStart ? 15 : 120;
     s.speed = clamp(s.speed + actual * dt * 3.6, 0, activeLimit); s.distance += s.speed / 3.6 * dt;
     const pullBuilding = tractionAllowed && s.actualTraction > .05 && s.releasePropagation > .35;
@@ -772,6 +812,12 @@ export class TrainSimulation {
       s.lkjStartDistance = s.distance;
       this.reject('已越过 LKJ 开车对标点，未按压【开车／7】键；本项错误已记录。');
     }
+    const specialtyComplete = s.trainingScope === 'smooth-only'
+      && s.wholeTrainStarted && s.rearLookCompleted && s.progressiveTraction && s.smoothStartQualified;
+    if (specialtyComplete && !s.completed) {
+      s.completed = true;
+      this.emit(`${getSmoothStartTerrain(s.terrainMode).label}专项完成：全列起动、后部瞭望和低速平稳加速均已完成。`);
+    }
     const coreComplete = s.wholeTrainStarted && s.rearLookCompleted && s.smoothStartQualified && s.lkjStartCorrect;
     if (s.signalPassed && !s.completed && s.distance >= ROUTE_CONTEXT.trainingEndDistance && s.speed >= 5 && (coreComplete || this.isAssessment())) {
       s.completed = true;
@@ -780,3 +826,4 @@ export class TrainSimulation {
     this.emit();
   }
 }
+
