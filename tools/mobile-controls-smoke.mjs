@@ -57,10 +57,12 @@ const result = await evaluate(`(() => {
   const independent=[...document.querySelectorAll('[data-drag-target="independent"]')].map(rect);
   const parking=[rect(document.querySelector('.parking-apply')),rect(document.querySelector('.parking-release'))];
   const noHotspotOverlap=independent.length===2&&independent.every((zone)=>parking.every((button)=>!overlap(zone,button)));
-  const zone=document.querySelector('[data-drag-target="independent"]');const zr=zone.getBoundingClientRect();
-  zone.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true,pointerId:17,clientX:zr.left+zr.width/2,clientY:zr.top+zr.height*.7}));
-  window.dispatchEvent(new PointerEvent('pointermove',{bubbles:true,pointerId:17,clientX:zr.left+zr.width/2,clientY:zr.top+4}));
-  window.dispatchEvent(new PointerEvent('pointerup',{bubbles:true,pointerId:17,clientX:zr.left+zr.width/2,clientY:zr.top+4}));
+  const badge=document.querySelector('[data-position-id="independent"]');const br=rect(badge);const badgeRect=badge.getBoundingClientRect();
+  const badgeAvoidsParking=parking.every((button)=>!overlap(br,button));
+  const badgeOwnsHitArea=badge.contains(document.elementFromPoint(badgeRect.left+badgeRect.width/2,badgeRect.top+badgeRect.height*.85));
+  badge.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true,pointerId:17,clientX:badgeRect.left+badgeRect.width/2,clientY:badgeRect.top+badgeRect.height*.7}));
+  window.dispatchEvent(new PointerEvent('pointermove',{bubbles:true,pointerId:17,clientX:badgeRect.left+badgeRect.width/2,clientY:badgeRect.top-18}));
+  window.dispatchEvent(new PointerEvent('pointerup',{bubbles:true,pointerId:17,clientX:badgeRect.left+badgeRect.width/2,clientY:badgeRect.top-18}));
   const independentDragChanged=!document.querySelector('[data-position-id="independent"] span').textContent.includes('制动Ⅱ');
   const parkingStillApplied=document.querySelector('#status').innerText.includes('停放制动 施加');
   const viewToggle=document.querySelector('#view-toggle');const viewPanel=document.querySelector('#mobile-view-tabs');
@@ -72,9 +74,9 @@ const result = await evaluate(`(() => {
   const toolbar=rect(document.querySelector('.stage-toolbar'));const exitButton=rect(document.querySelector('#exit-immersive'));
   const toolbarAvoidsExit=!overlap(toolbar,exitButton);
   const stage=document.querySelector('#stage').getBoundingClientRect();
-  return {closedInitially,toggleVisible,opened,closedAgain,noHotspotOverlap,independentDragChanged,parkingStillApplied,viewToggleVisible,viewPanelOpened,rearViewSelectable,toolbarAvoidsExit,stage:[Math.round(stage.width),Math.round(stage.height)],errors:${JSON.stringify(errors)}};
+  return {closedInitially,toggleVisible,opened,closedAgain,noHotspotOverlap,badgeAvoidsParking,badgeOwnsHitArea,independentDragChanged,parkingStillApplied,viewToggleVisible,viewPanelOpened,rearViewSelectable,toolbarAvoidsExit,stage:[Math.round(stage.width),Math.round(stage.height)],errors:${JSON.stringify(errors)}};
 })()`);
-for (const key of ['closedInitially','toggleVisible','opened','closedAgain','noHotspotOverlap','independentDragChanged','parkingStillApplied','viewToggleVisible','viewPanelOpened','rearViewSelectable','toolbarAvoidsExit']) assert.equal(result[key], true, `${key} 验证失败`);
+for (const key of ['closedInitially','toggleVisible','opened','closedAgain','noHotspotOverlap','badgeAvoidsParking','badgeOwnsHitArea','independentDragChanged','parkingStillApplied','viewToggleVisible','viewPanelOpened','rearViewSelectable','toolbarAvoidsExit']) assert.equal(result[key], true, `${key} 验证失败`);
 assert.deepEqual(result.stage, [1056, 480]);
 assert.deepEqual(errors, []);
 const shot = await send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false });

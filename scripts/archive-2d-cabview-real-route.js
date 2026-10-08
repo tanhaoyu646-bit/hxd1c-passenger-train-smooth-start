@@ -1,7 +1,7 @@
-import { TrainSimulation } from './dynamics.js?rev=mobile-controls-v26';
-import { getProcedure, procedureState, scoreRun } from './procedure.js?rev=mobile-controls-v26';
+import { TrainSimulation } from './dynamics.js?rev=mobile-controls-v28';
+import { getProcedure, procedureState, scoreRun } from './procedure.js?rev=mobile-controls-v28';
 import { MstsRouteScene } from './mstsRouteScene.js?rev=smooth-start-v19-cir-incoming-clickfix';
-import { LKJ_FIELD_DEFINITIONS, LKJ_TRAINING_PARAMETERS, RUNNING_NOTICES, SIGNAL_ASPECTS, TRAIN_DYNAMICS, SMOOTH_START_TERRAINS, getSmoothStartTerrain } from './scenario.js?rev=mobile-controls-v26';
+import { LKJ_FIELD_DEFINITIONS, LKJ_TRAINING_PARAMETERS, RUNNING_NOTICES, SIGNAL_ASPECTS, TRAIN_DYNAMICS, SMOOTH_START_TERRAINS, getSmoothStartTerrain } from './scenario.js?rev=mobile-controls-v28';
 import { SCENARIOS, ROUTE_CONTEXT, getScenario, scenarioAudioPath } from './credentialScenario.js?rev=smooth-start-v19-cir-incoming-clickfix';
 
 const $ = (q) => document.querySelector(q);
@@ -123,6 +123,12 @@ function createFront() {
   elements.independentPosition=makePositionBadge('independent','单阀',118,321,76);
   elements.tractionPosition=makePositionBadge('traction','牵引手柄',438,323,86);
   elements.directionPosition=makePositionBadge('direction','换向手柄',521,342,88);
+  // 手机端允许直接在“自阀/单阀位置状态框”上拖动。未完成LKJ初始核对时，
+  // 状态框仍保持原来的“核对初始位置”用途；进入操纵后才作为拖动代理。
+  for(const [id,badge,target] of [['auto',elements.autoPosition,elements.auto],['independent',elements.independentPosition,elements.independent]]){
+    badge.dataset.dragProxy=id;
+    badge.addEventListener('pointerdown',(event)=>{if(sim.state.lkjConfirmed){event.stopPropagation();startDrag(id,target,event);}});
+  }
   const switchPanelTrigger=document.createElement('button');
   switchPanelTrigger.type='button';switchPanelTrigger.className='switch-panel-trigger';switchPanelTrigger.setAttribute('aria-label','放大中部板钮面板');
   switchPanelTrigger.style.left=pct(232,640);switchPanelTrigger.style.top=pct(337,480);switchPanelTrigger.style.width=pct(165,640);switchPanelTrigger.style.height=pct(43,480);
@@ -838,8 +844,12 @@ if(mobileLike)document.body.classList.add('mobile-controls-enabled');
 let mobileEntered=!mobileLike;
 function syncMobileViewport(){
   const viewport=window.visualViewport;const root=document.documentElement;
-  root.style.setProperty('--visual-height',`${Math.round(viewport?.height||innerHeight)}px`);
+  const visualHeight=Math.round(viewport?.height||innerHeight);
+  root.style.setProperty('--visual-height',`${visualHeight}px`);
   root.style.setProperty('--visual-offset-top',`${Math.round(viewport?.offsetTop||0)}px`);
+  // LKJ 原型为 800×615。手机端标题栏悬浮，不占布局高度；按可见高度
+  // 等比计算最大宽度，避免底部两排实体键（尤其“确认”键）落到屏幕外。
+  root.style.setProperty('--lkj-fit-width',`${Math.max(1,Math.floor((visualHeight-8)*800/615))}px`);
   if(mobileLike&&!mobileEntered)$('#landscape-gate').hidden=false;
 }
 syncMobileViewport();
