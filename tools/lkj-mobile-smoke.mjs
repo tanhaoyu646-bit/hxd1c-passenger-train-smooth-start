@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 
 const port = Number(process.env.CDP_PORT || 9224);
-const url = process.env.TRAINING_URL || 'http://127.0.0.1:4175/?rev=lkj-mobile-smoke';
+const url = process.env.TRAINING_URL || 'http://127.0.0.1:4175/?rev=lkj-mobile-smoke&debug=1';
 const width = Number(process.env.VIEWPORT_WIDTH || 667);
 const height = Number(process.env.VIEWPORT_HEIGHT || 375);
 const pages = await fetch(`http://127.0.0.1:${port}/json`).then((response) => response.json());
@@ -86,7 +86,19 @@ const revealCount = await evaluate(`document.querySelectorAll('.lkj-reveal-table
 for (let index = 0; index < revealCount; index += 1) await touchKey('confirm');
 assert.equal(await evaluate(`document.querySelectorAll('#procedure li.done').length >= 2`), true, 'LKJ 参数与揭示确认未通过');
 assert.equal(await evaluate(`Boolean(document.querySelector('.lkj-native-chart'))`), true, '完成核对后未进入 LKJ 监控主界面');
+const positionBefore = await evaluate(`Number(document.querySelector('.lkj-position-line').getAttribute('x1'))`);
+await evaluate(`(() => {window.__trainingSim.state.distance=120;window.__trainingSim.state.speed=20;window.__trainingSim.emit();return true;})()`);
+await new Promise((resolve) => setTimeout(resolve, 240));
+const movingChart = await evaluate(`(() => {
+  const line=document.querySelector('.lkj-position-line');
+  const points=(document.querySelector('.lkj-speed-line')?.getAttribute('points')||'').trim().split(/\\s+/).filter(Boolean).map((point)=>Number(point.split(',')[0]));
+  return {position:Number(line.getAttribute('x1')),traceX:points};
+})()`);
+assert.equal(movingChart.position, positionBefore, 'LKJ当前位置基准线不应随里程平移');
+assert(movingChart.traceX.length >= 2, 'LKJ实速轨迹未形成滚动样本');
+assert(movingChart.traceX.at(-1) >= positionBefore - 1 && movingChart.traceX.at(-1) <= positionBefore + 1, 'LKJ最新实速点应位于固定基准线');
+assert(movingChart.traceX[0] < movingChart.traceX.at(-1), 'LKJ历史实速轨迹应向基准线左侧滚动');
 assert.deepEqual(errors, []);
 
 socket.close();
-console.log(JSON.stringify({ width, height, device: fit.device, allKeysVisible: true, queryNavigation: true, parameterReview: true, revealReview: true, lkjConfirmed: true }, null, 2));
+console.log(JSON.stringify({ width, height, device: fit.device, allKeysVisible: true, queryNavigation: true, parameterReview: true, revealReview: true, lkjConfirmed: true, fixedPositionLine: movingChart.position, scrollingTrace: movingChart.traceX }, null, 2));

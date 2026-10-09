@@ -16,11 +16,34 @@ const notchOneCorrect = (s) => s.singleValveNotchSynchronized
   && s.notchOneHoldCorrect
   && s.tractionCurrentRising;
 const notchOneReady = (s) => assessmentOr(s, s.notchOneHoldAttempted, notchOneCorrect(s));
-const notchTwoRearCorrect = (s) => s.notchTwoSequenceCorrect && s.wholeTrainStarted && s.rearLookCompleted;
+const notchTwoRearCorrect = (s) => s.notchTwoApplied && s.wholeTrainStarted && s.rearLookCompleted;
 const notchTwoRearReady = (s) => assessmentOr(s, s.notchTwoApplied && s.rearLookCompleted, notchTwoRearCorrect(s));
 const progressiveCorrect = (s) => s.progressiveToFourCorrect && s.smoothStartQualified;
 const progressiveReady = (s) => assessmentOr(s, s.notchFourApplied, progressiveCorrect(s));
 const lkjStartReady = (s) => assessmentOr(s, s.lkjStartAttempted, s.lkjStartCorrect);
+
+// 复合操纵项按独立动作给分，避免一次触控漏识别把后续已正确完成的
+// 全列起动、后部瞭望等项目一起清零。最后一项吸收不能整除的余分。
+const splitEarned = (checks, weight) => {
+  const unit = Math.floor(weight / checks.length);
+  const remainder = weight - unit * checks.length;
+  return checks.reduce((sum, passed, index) => sum + (passed ? unit + (index === checks.length - 1 ? remainder : 0) : 0), 0);
+};
+const notchOneEarned = (s, weight) => splitEarned([
+  s.notchOneAppliedAt != null,
+  s.singleValveNotchSynchronized,
+  s.notchOneHoldCorrect && s.tractionCurrentRising,
+], weight);
+const notchTwoRearEarned = (s, weight) => splitEarned([
+  s.notchTwoApplied,
+  s.wholeTrainStarted,
+  s.rearLookCompleted,
+], weight);
+const progressiveEarned = (s, weight) => splitEarned([
+  s.notchThreeAfterStart,
+  s.notchThreeAfterStart && s.notchFourApplied,
+  s.progressiveToFourCorrect && s.smoothStartQualified,
+], weight);
 
 const preDepartureCommunicationReady = (s) => {
   if (s.scenarioId === 'normal') return s.radioContacted;
@@ -49,9 +72,9 @@ export const PROCEDURE = [
   ['缓解停放制动', parkingBrakeReleased, 5],
   ['制动保压状态首次查询并确认尾部风压', baselineReady, 5, baselineCorrect],
   ['缓解自阀，再次查询确认尾部风压上升高于20 kPa', releaseRiseReady, 9, releaseRiseCorrect],
-  ['2秒内完成单阀缓解与1.0级，保持1～2秒确认电流上升', notchOneReady, 9, notchOneCorrect],
-  ['置2.0级，待全列起动并完成后部瞭望', notchTwoRearReady, 10, notchTwoRearCorrect],
-  ['全列起动后按2.0→3.0→4.0级平稳加速', progressiveReady, 7, progressiveCorrect],
+  ['2秒内完成单阀缓解与1.0级，保持1～2秒确认电流上升', notchOneReady, 9, s => notchOneEarned(s, 9)],
+  ['置2.0级，待全列起动并完成后部瞭望', notchTwoRearReady, 10, s => notchTwoRearEarned(s, 10)],
+  ['全列起动后按2.0→3.0→4.0级平稳加速', progressiveReady, 7, s => progressiveEarned(s, 7)],
   ['到出站信号机位置按压LKJ开车／7键', lkjStartReady, 5, s => s.lkjStartCorrect],
   ['越过出站信号机后稳定运行300 m', s => s.completed, 5],
 ];
@@ -61,9 +84,9 @@ export const SMOOTH_LEVEL_PROCEDURE = [
   ['缓解停放制动', parkingBrakeReleased, 5],
   ['制动保压状态首次查询并确认尾部风压', baselineReady, 10, baselineCorrect],
   ['缓解自阀，再次查询确认尾部风压上升高于20 kPa', releaseRiseReady, 20, releaseRiseCorrect],
-  ['2秒内完成单阀缓解与1.0级，保持1～2秒确认电流上升', notchOneReady, 15, notchOneCorrect],
-  ['置2.0级，待全列起动并完成后部瞭望', notchTwoRearReady, 20, notchTwoRearCorrect],
-  ['全列起动后按2.0→3.0→4.0级平稳加速', progressiveReady, 15, progressiveCorrect],
+  ['2秒内完成单阀缓解与1.0级，保持1～2秒确认电流上升', notchOneReady, 15, s => notchOneEarned(s, 15)],
+  ['置2.0级，待全列起动并完成后部瞭望', notchTwoRearReady, 20, s => notchTwoRearEarned(s, 20)],
+  ['全列起动后按2.0→3.0→4.0级平稳加速', progressiveReady, 15, s => progressiveEarned(s, 15)],
   ['到出站信号机位置按压LKJ开车／7键', lkjStartReady, 10, s => s.lkjStartCorrect],
 ];
 
@@ -71,10 +94,10 @@ export const SMOOTH_UPHILL_PROCEDURE = [
   ['选择平道或上坡道起动场景', s => s.terrainSelected, 5],
   ['缓解停放制动', parkingBrakeReleased, 5],
   ['制动保压状态首次查询并确认尾部风压', baselineReady, 10, baselineCorrect],
-  ['2秒内完成单阀缓解与不高于1.0级，保持1～2秒确认电流上升', notchOneReady, 15, notchOneCorrect],
+  ['2秒内完成单阀缓解与不高于1.0级，保持1～2秒确认电流上升', notchOneReady, 15, s => notchOneEarned(s, 15)],
   ['缓解自阀，再次查询确认尾部风压上升高于20 kPa', releaseRiseReady, 20, releaseRiseCorrect],
-  ['置2.0级，待全列起动并完成后部瞭望', notchTwoRearReady, 20, notchTwoRearCorrect],
-  ['全列起动后按2.0→3.0→4.0级平稳加速', progressiveReady, 15, progressiveCorrect],
+  ['置2.0级，待全列起动并完成后部瞭望', notchTwoRearReady, 20, s => notchTwoRearEarned(s, 20)],
+  ['全列起动后按2.0→3.0→4.0级平稳加速', progressiveReady, 15, s => progressiveEarned(s, 15)],
   ['到出站信号机位置按压LKJ开车／7键', lkjStartReady, 10, s => s.lkjStartCorrect],
 ];
 
@@ -121,7 +144,10 @@ export function scoreRun(state) {
       ? preDepartureStepEarned(state)
       : state.trainingScope !== 'smooth-only' && index === 8
         ? departureAuthorizationStepEarned(state)
-        : scoreTest(state) ? weight : 0;
+        : (() => {
+          const scored = scoreTest(state);
+          return typeof scored === 'number' ? Math.max(0, Math.min(weight, scored)) : scored ? weight : 0;
+        })();
     const earned = scoreLocks.has(index) ? 0 : rawEarned;
     return {
       label,

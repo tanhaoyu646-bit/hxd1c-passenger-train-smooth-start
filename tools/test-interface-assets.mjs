@@ -34,6 +34,9 @@ for (const state of nativeStates) {
 assert.match(interfaceSource, /native-states\/main-blank\.png/);
 assert.match(interfaceSource, /lkj-native-equipment/);
 assert.match(interfaceSource, /lkjControlLimit/);
+assert.match(interfaceSource, /const LKJ_POSITION_X=191/);
+assert.match(interfaceSource, /lkjChartX\(distance,currentDistance\)/);
+assert.doesNotMatch(interfaceSource, /const positionX=191\+/);
 assert.match(interfaceSource, /lkj-parameter-form/);
 assert.doesNotMatch(interfaceSource, /设备自检正常/);
 assert.doesNotMatch(interfaceSource, /button\.style\.backgroundImage/);

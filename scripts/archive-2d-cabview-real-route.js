@@ -1,7 +1,7 @@
-import { TrainSimulation } from './dynamics.js?rev=mobile-controls-v28';
-import { getProcedure, procedureState, scoreRun } from './procedure.js?rev=mobile-controls-v28';
+import { TrainSimulation } from './dynamics.js?rev=scoring-lkj-v29';
+import { getProcedure, procedureState, scoreRun } from './procedure.js?rev=scoring-lkj-v29';
 import { MstsRouteScene } from './mstsRouteScene.js?rev=smooth-start-v19-cir-incoming-clickfix';
-import { LKJ_FIELD_DEFINITIONS, LKJ_TRAINING_PARAMETERS, RUNNING_NOTICES, SIGNAL_ASPECTS, TRAIN_DYNAMICS, SMOOTH_START_TERRAINS, getSmoothStartTerrain } from './scenario.js?rev=mobile-controls-v28';
+import { LKJ_FIELD_DEFINITIONS, LKJ_TRAINING_PARAMETERS, RUNNING_NOTICES, SIGNAL_ASPECTS, TRAIN_DYNAMICS, SMOOTH_START_TERRAINS, getSmoothStartTerrain } from './scenario.js?rev=scoring-lkj-v29';
 import { SCENARIOS, ROUTE_CONTEXT, getScenario, scenarioAudioPath } from './credentialScenario.js?rev=smooth-start-v19-cir-incoming-clickfix';
 
 const $ = (q) => document.querySelector(q);
@@ -28,6 +28,7 @@ const views = {
   rearRight: 'HXD1C_right.png',
 };
 const debugMode = new URLSearchParams(location.search).get('debug') === '1';
+if(debugMode)window.__trainingSim=sim;
 const keys = [['lkj','LKJ确认'],['panto','前受电弓'],['main-breaker','主断合'],['compressor','压缩机'],['parking','停放缓解'],['headlight','前照灯'],['horn','风笛'],['reset','警惕/复位']];
 let selectedView = 'front';
 let activeDrag = null;
@@ -86,7 +87,7 @@ function makePhysicalButton(id,label,x,y,w,h,action) { const el=document.createE
 function makeNeedle(id,image,x,y,w,h,pivot,start,end,kind='') { const el=document.createElement('img'); el.className=`needle original-game-needle ${kind}`; el.dataset.id=id; el.dataset.start=start; el.dataset.end=end; el.src=`./assets/archive-cabview/${image}`; el.alt=''; el.setAttribute('aria-hidden','true'); el.style.left=pct(x,640); el.style.top=pct(y,480); el.style.width=pct(w,640); el.style.height=pct(h,480); el.style.transformOrigin=`50% ${pivot / h * 100}%`; overlay.append(el); return el; }
 function makeBar(id,x,y,w,h,color='#5dffd5') { const el=document.createElement('div'); el.className='gauge-bar'; el.dataset.id=id; el.style.left=pct(x,640); el.style.top=pct(y,480); el.style.width=pct(w,640); el.style.height=pct(h,480); el.style.background=color; overlay.append(el); return el; }
 function makeDigital(id,x,y,w,h,kind='') { const el=document.createElement('div'); el.className=`digital ${kind}`; el.dataset.id=id; el.style.left=pct(x,640); el.style.top=pct(y,480); el.style.width=pct(w,640); el.style.height=pct(h,480); overlay.append(el); return el; }
-function makePositionBadge(id,label,x,y,w=82) { const el=document.createElement('button');const checkId={auto:'autoBrake',independent:'independentBrake',traction:'traction',direction:'direction'}[id];el.type='button';el.className='control-position-badge';el.dataset.positionId=id;el.setAttribute('aria-label',`核对${label}初始位置`);el.style.left=pct(x,640);el.style.top=pct(y,480);el.style.width=pct(w,640);el.innerHTML=`<b>${label}</b><span>—</span>`;el.addEventListener('click',(event)=>{event.preventDefault();if(!sim.state.lkjConfirmed)command('initial-inspect',checkId);});overlay.append(el);return el; }
+function makePositionBadge(id,label,x,y,w=82) { const el=document.createElement('button');const checkId={auto:'autoBrake',independent:'independentBrake',traction:'traction',direction:'direction'}[id];el.type='button';el.className='control-position-badge';el.dataset.positionId=id;el.setAttribute('aria-label',`核对${label}初始位置`);el.style.left=pct(x,640);el.style.top=pct(y,480);el.style.width=pct(w,640);el.innerHTML=`<b>${label}</b><span>—</span>`;el.addEventListener('click',(event)=>{event.preventDefault();if(!sim.state.lkjConfirmed)command('initial-inspect',checkId);else if(id==='direction')command('direction',sim.state.direction==='F'?'N':'F');});overlay.append(el);return el; }
 function makeStateSprite(id,image,x,y,w,h,cols,rows) { const el=document.createElement('div'); el.className=id==='signal'?'signal-sprite':'panto-sprite'; el.dataset.id=id; el.style.left=pct(x,640); el.style.top=pct(y,480); el.style.width=pct(w,640); el.style.height=pct(h,480); el.style.backgroundImage=`url("./assets/archive-cabview/${image}")`; el.style.backgroundSize=`${cols*100}% ${rows*100}%`; overlay.append(el); return el; }
 function setNeedle(el,value,max) { const safe=Number.isFinite(Number(value))?Number(value):0;const ratio=Math.max(0,Math.min(1,safe/max)); const start=Number(el.dataset.start); const end=Number(el.dataset.end); el.style.transform=`rotate(${start+(end-start)*ratio}deg)`; }
 // 原贴图从前推端到后拉端依次为：牵引最大(frame 0) → 零位(frame 7) → 电制动最大(frame 15)。
@@ -95,7 +96,13 @@ let elements={};
 function startDrag(id, el, event) {
   event.preventDefault();
   const range=id==='traction'?15:5;
-  activeDrag={id,pointerId:event.pointerId,startY:event.clientY,start:sim.state[id==='auto'?'autoBrake':id==='independent'?'independentBrake':'traction'],pixelsPerStep:Math.max(8,el.getBoundingClientRect().height/range)};
+  const start=sim.state[id==='auto'?'autoBrake':id==='independent'?'independentBrake':'traction'];
+  // 司控器按卡位操纵。手机指针事件的位移通常比鼠标稀疏，原来的8px/级
+  // 容易一次从零位跳到3～4级；牵引手柄改用较大的卡位间距，并记录已到达档位。
+  const pixelsPerStep=id==='traction'
+    ? Math.max(18,Math.min(24,el.getBoundingClientRect().height/4))
+    : Math.max(10,el.getBoundingClientRect().height/range);
+  activeDrag={id,pointerId:event.pointerId,startY:event.clientY,start,commanded:start,lastTarget:start,pixelsPerStep};
   try{event.currentTarget.setPointerCapture?.(event.pointerId);}catch{ /* 部分 iOS WebKit 不开放指针捕获，窗口级监听仍可完成拖动。 */ }
 }
 function createFront() {
@@ -123,9 +130,9 @@ function createFront() {
   elements.independentPosition=makePositionBadge('independent','单阀',118,321,76);
   elements.tractionPosition=makePositionBadge('traction','牵引手柄',438,323,86);
   elements.directionPosition=makePositionBadge('direction','换向手柄',521,342,88);
-  // 手机端允许直接在“自阀/单阀位置状态框”上拖动。未完成LKJ初始核对时，
+  // 手机端允许直接在“自阀/单阀/牵引手柄位置状态框”上拖动。未完成LKJ初始核对时，
   // 状态框仍保持原来的“核对初始位置”用途；进入操纵后才作为拖动代理。
-  for(const [id,badge,target] of [['auto',elements.autoPosition,elements.auto],['independent',elements.independentPosition,elements.independent]]){
+  for(const [id,badge,target] of [['auto',elements.autoPosition,elements.auto],['independent',elements.independentPosition,elements.independent],['traction',elements.tractionPosition,elements.traction]]){
     badge.dataset.dragProxy=id;
     badge.addEventListener('pointerdown',(event)=>{if(sim.state.lkjConfirmed){event.stopPropagation();startDrag(id,target,event);}});
   }
@@ -369,18 +376,28 @@ function lkjParameterView(review=false){
   const footer=review?'<span>参数核对</span><b>【←】返回修改　【确认】保存并进入揭示核对</b>':'<span>4各速度</span><span>3系统</span><span>2时间</span><span>1检修</span><span class="cancel">0取消</span><b>确定</b>';
   return lkjFrame(`${lkjNativeTop()}<section class="lkj-parameter-form"><header>参数设定</header><div class="lkj-param-columns">${columns}</div><footer>${footer}</footer>${lkjNotice?`<p>${lkjNotice}</p>`:''}</section>`);
 }
-function lkjSpeedTracePoints(){
+const LKJ_POSITION_X=191;
+const LKJ_CHART_LEFT=64;
+const LKJ_CHART_RIGHT=736;
+function lkjChartX(distance,currentDistance){
+  const pixelsPerMeter=(LKJ_CHART_RIGHT-LKJ_POSITION_X)/Math.max(1,ROUTE_CONTEXT.trainingEndDistance);
+  return LKJ_POSITION_X+(distance-currentDistance)*pixelsPerMeter;
+}
+function lkjSpeedTracePoints(currentDistance){
   if(!lkjSpeedTrace.length)return '';
-  const maxDistance=Math.max(ROUTE_CONTEXT.trainingEndDistance,1);
-  return lkjSpeedTrace.map(({distance,speed})=>`${64+Math.min(672,distance/maxDistance*672)},${390-Math.min(120,speed)/120*330}`).join(' ');
+  return lkjSpeedTrace
+    .map(({distance,speed})=>({x:lkjChartX(distance,currentDistance),y:390-Math.min(120,speed)/120*330}))
+    .filter(({x})=>x>=LKJ_CHART_LEFT&&x<=LKJ_CHART_RIGHT)
+    .map(({x,y})=>`${x},${y}`)
+    .join(' ');
 }
 function lkjMonitorView(overlay=''){
   const state=sim.state;const scenario=getScenario(state.scenarioId);const limit=lkjActiveLimit(state,scenario);const controlLimit=lkjControlLimit(state,scenario);
-  const controlY=390-Math.min(120,controlLimit)/120*330;const positionX=191+Math.min(545,state.distance/Math.max(1,ROUTE_CONTEXT.trainingEndDistance)*545);
-  const trace=lkjSpeedTracePoints();const status=state.lkjStartCorrect?'开车对标完成':state.speed>=1?'运行监控':'停车监控';
+  const controlY=390-Math.min(120,controlLimit)/120*330;
+  const trace=lkjSpeedTracePoints(state.distance);const status=state.lkjStartCorrect?'开车对标完成':state.speed>=1?'运行监控':'停车监控';
   const special=state.lkjUnlockCorrect?`<div class="lkj-native-special ${scenario.id}">${scenario.id==='greenPermit'?'绿色许可证行车':'路票行车'}</div>`:'';
   const equipment=lkjEquipmentPanelVisible?`<aside class="lkj-native-equipment"><b>原边电流 <em>${Math.round(Math.max(0,state.actualTraction)*105)}</em></b><b>列车管压力 <em>${Math.round(state.trainPipe)}</em></b><b>制动缸压力1 <em>${Math.round(state.brakeCyl)}</em></b><b>均衡风缸 <em>${Math.round(state.equalizingRes)}</em></b><b>制动缸压力2 <em>${Math.round(state.brakeCyl)}</em></b><b>工况 <em>${state.direction==='F'?'向前':state.direction==='R'?'向后':'零位'}　${state.traction>0?'牵引':'非零'}</em></b><b>过机矫正 <em>0　0　0</em></b><b>通道速度 <em>${Math.round(state.speed)}　${Math.round(state.speed)}　${Math.round(state.speed)}</em></b></aside>`:'';
-  return lkjFrame(`${lkjNativeTop(state)}${special}<svg class="lkj-native-chart" viewBox="0 0 800 615" preserveAspectRatio="none" aria-label="LKJ运行监控曲线"><polyline class="lkj-control-line" points="64,${controlY} 232,${controlY} 278,${controlY} 736,${controlY}"/><line class="lkj-position-line" x1="${positionX}" y1="61" x2="${positionX}" y2="390"/>${trace?`<polyline class="lkj-speed-line" points="${trace}"/>`:''}</svg>${equipment}<div class="lkj-native-status">${status}</div>${lkjNotice?`<div class="lkj-device-toast">${lkjNotice}</div>`:''}${overlay}`);
+  return lkjFrame(`${lkjNativeTop(state)}${special}<svg class="lkj-native-chart" viewBox="0 0 800 615" preserveAspectRatio="none" aria-label="LKJ运行监控曲线"><polyline class="lkj-control-line" points="64,${controlY} 232,${controlY} 278,${controlY} 736,${controlY}"/><line class="lkj-position-line" x1="${LKJ_POSITION_X}" y1="61" x2="${LKJ_POSITION_X}" y2="390"/>${trace?`<polyline class="lkj-speed-line" points="${trace}"/>`:''}</svg>${equipment}<div class="lkj-native-status">${status}</div>${lkjNotice?`<div class="lkj-device-toast">${lkjNotice}</div>`:''}${overlay}`);
 }
 function lkjNonnormalOverlay(){
   if(lkjPhase==='nonnormal-menu'){
@@ -702,7 +719,7 @@ function syncSwitchPanel(state){
   if(!switchPanelRoot)return;
   for(const def of switchDefs){const button=switchPanelRoot.querySelector(`[data-switch-id="${def.id}"]`);if(!button)continue;const value=def.read(state);button.classList.remove('state-up','state-mid','state-down');let label='0';if(def.states){label=value==='white'?'白':value==='red'?'红':'0';button.classList.add(value==='white'?'state-up':value==='red'?'state-down':'state-mid');}else{const on=Boolean(value);label=on?def.on:def.off;button.classList.add(on?'state-up':'state-down');}button.querySelector('.switch-value').textContent=label;button.setAttribute('aria-pressed',String(Boolean(value&&value!=='0')));}
 }
-function bindDrag() { addEventListener('pointermove',(event)=>{ if(!activeDrag||(activeDrag.pointerId!==undefined&&event.pointerId!==activeDrag.pointerId))return; event.preventDefault(); const d=activeDrag; const delta=Math.round((d.startY-event.clientY)/d.pixelsPerStep); if(d.id==='traction')command('traction',Math.max(-8,Math.min(7,d.start+delta))); else command(d.id==='auto'?'auto-brake':'independent-brake',Math.max(0,Math.min(5,d.start+delta))); },{passive:false}); addEventListener('pointerup',(event)=>{if(!activeDrag||activeDrag.pointerId===event.pointerId)activeDrag=null}); addEventListener('pointercancel',(event)=>{if(!activeDrag||activeDrag.pointerId===event.pointerId)activeDrag=null}); }
+function bindDrag() { addEventListener('pointermove',(event)=>{ if(!activeDrag||(activeDrag.pointerId!==undefined&&event.pointerId!==activeDrag.pointerId))return; event.preventDefault(); const d=activeDrag; const delta=Math.round((d.startY-event.clientY)/d.pixelsPerStep); if(d.id==='traction'){const target=Math.max(-8,Math.min(7,d.start+delta));if(target===d.lastTarget)return;d.lastTarget=target;let current=d.commanded;while(current!==target){const next=current+(target>current?1:-1);if(command('traction',next)===false)break;current=next;}d.commanded=current;}else command(d.id==='auto'?'auto-brake':'independent-brake',Math.max(0,Math.min(5,d.start+delta))); },{passive:false}); addEventListener('pointerup',(event)=>{if(!activeDrag||activeDrag.pointerId===event.pointerId)activeDrag=null}); addEventListener('pointercancel',(event)=>{if(!activeDrag||activeDrag.pointerId===event.pointerId)activeDrag=null}); }
 function activeState(id,state) { return Boolean(state[id==='panto'?'panto':id==='main-breaker'?'mainBreaker':id==='control-power'?'powerOn':id==='parking'?'parkingBrake':id==='headlight'?'headlight':id==='compressor'?'compressor':id==='authority'?'authority':id==='horn'?'hornActive':id==='lkj'?'lkjAttempted':id==='reset'?'vigilanceAcknowledged':false]); }
 function syncSignalTarget(state){
   if(!signalTarget)return;

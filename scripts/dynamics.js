@@ -140,6 +140,20 @@ export class TrainSimulation {
     const s = this.state;
     if (!this.isAssessment() || s.assessmentFirstTractionRecorded) return;
     s.assessmentFirstTractionRecorded = true;
+    if (s.trainingScope === 'smooth-only') {
+      const smoothChecks = [
+        [0, s.terrainSelected, '未选择平道或上坡道场景即动车'],
+        [1, !s.parkingBrake, '起动前停放制动未缓解'],
+        [2, s.tailBaselineQueryAttempted && s.tailBaselinePressure != null, '未在制动保压状态查询并确认基准尾部风压'],
+      ];
+      // 平道必须先缓解自阀并确认尾压上升；上坡道按作业顺序应先建立
+      // 低级位牵引电流，因此不能在首次加牵引时锁掉后续的自阀缓解项。
+      if (this.startMode() === 'level') {
+        smoothChecks.push([3, s.autoBrakeReleaseAttempted && s.tailReleaseQueryAttempted && s.tailPressureRiseCorrect, '平道起动未先缓解自阀并确认尾部风压上升即动车']);
+      }
+      for (const [index, correct, reason] of smoothChecks) if (!correct) this.lockAssessmentScore(index, reason);
+      return;
+    }
     const scenario = getScenario(s.scenarioId);
     const checks = [
       [0, s.scenarioSelected, '未选择场景即动车'],

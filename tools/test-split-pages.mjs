@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { TrainSimulation } from '../scripts/dynamics.js';
 import { SMOOTH_START_TERRAINS } from '../scripts/scenario.js';
-import { getProcedure } from '../scripts/procedure.js';
+import { getProcedure, scoreRun } from '../scripts/procedure.js';
 
 const departureHtml = await readFile(new URL('../index.html', import.meta.url), 'utf8');
 const smoothHtml = await readFile(new URL('../smooth-start/index.html', import.meta.url), 'utf8');
@@ -51,4 +51,34 @@ unsafeUphill.command('auto-brake', 0);
 unsafeUphill.tick(.1);
 assert.equal(unsafeUphill.state.rollbackRisk, true, '未建立牵引即解除上坡保持应记录后溜风险');
 
-console.log('Split pages valid: complete departure has 19 items; specialty has 8 scored items and differentiated level/uphill start logic.');
+const perfectScore = new TrainSimulation();
+perfectScore.command('terrain-select', 'level');
+Object.assign(perfectScore.state, {
+  parkingBrake: false,
+  tailBaselineQueryAttempted: true, tailBaselinePressure: 500,
+  autoBrakeReleaseAttempted: true, tailReleaseQueryAttempted: true, tailPressureRiseCorrect: true,
+  notchOneAppliedAt: 1, singleValveNotchSynchronized: true, notchOneHoldCorrect: true, tractionCurrentRising: true,
+  notchTwoApplied: true, wholeTrainStarted: true, rearLookCompleted: true,
+  notchThreeAfterStart: true, notchFourApplied: true, progressiveToFourCorrect: true, smoothStartQualified: true,
+  lkjStartAttempted: true, lkjStartCorrect: true,
+});
+assert.equal(scoreRun(perfectScore.state).score, 100, '平稳起动专项规范操作应获得100分');
+
+const independentScoring = structuredClone(perfectScore.state);
+independentScoring.notchOneAppliedAt = null;
+independentScoring.singleValveNotchSynchronized = false;
+independentScoring.notchOneHoldCorrect = false;
+independentScoring.tractionCurrentRising = false;
+const independentResult = scoreRun(independentScoring);
+assert.equal(independentResult.itemScores[4].earned, 0, '1.0级操纵错误应只影响对应项目');
+assert.equal(independentResult.itemScores[5].earned, 20, '已完成的2.0级、全列起动与后部瞭望不得连锁清零');
+
+const assessmentLocks = new TrainSimulation();
+assessmentLocks.command('training-mode', 'assessment');
+assessmentLocks.command('terrain-select', 'level');
+assessmentLocks.command('parking-release');
+assessmentLocks.command('auto-brake', 0);
+assert.equal(assessmentLocks.command('traction', 1), true);
+assert.deepEqual(assessmentLocks.state.assessmentScoreLocks, [2, 3], '专项首次牵引只能锁定缺失的基准尾压与平道缓解确认');
+
+console.log('Split pages valid: complete departure has 19 items; specialty has 8 independently scored items, 100-point reference path, and differentiated level/uphill start logic.');
