@@ -36,9 +36,10 @@ assert.equal(uphill.command('parking-release'), true);
 assert.equal(uphill.command('tail-query', uphill.state.tailPipe), true);
 assert.equal(uphill.command('independent-brake', 0), true);
 assert.equal(uphill.command('traction', 1), true, '上坡道应允许自阀保持时以1.0级建立牵引');
-for (let i = 0; i < 24; i += 1) uphill.tick(.05);
+for (let i = 0; i < 64; i += 1) uphill.tick(.05);
 assert.equal(uphill.state.tractionCurrentRising, true);
 assert.equal(uphill.command('auto-brake', 0), true);
+assert.equal(uphill.state.notchOneHoldSeconds > 2, true, '上坡道1.0级停留超过2秒的回归场景应成立');
 assert.equal(uphill.state.notchOneHoldCorrect, true);
 assert.equal(uphill.state.rollbackRisk, false);
 

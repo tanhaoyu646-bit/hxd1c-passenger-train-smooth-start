@@ -1,7 +1,7 @@
-import { TrainSimulation } from './dynamics.js?rev=scoring-lkj-v29';
-import { getProcedure, procedureState, scoreRun } from './procedure.js?rev=scoring-lkj-v29';
+import { TrainSimulation } from './dynamics.js?rev=notch-timing-v30';
+import { getProcedure, procedureState, scoreRun } from './procedure.js?rev=notch-timing-v30';
 import { MstsRouteScene } from './mstsRouteScene.js?rev=smooth-start-v19-cir-incoming-clickfix';
-import { LKJ_FIELD_DEFINITIONS, LKJ_TRAINING_PARAMETERS, RUNNING_NOTICES, SIGNAL_ASPECTS, TRAIN_DYNAMICS, SMOOTH_START_TERRAINS, getSmoothStartTerrain } from './scenario.js?rev=scoring-lkj-v29';
+import { LKJ_FIELD_DEFINITIONS, LKJ_TRAINING_PARAMETERS, RUNNING_NOTICES, SIGNAL_ASPECTS, TRAIN_DYNAMICS, SMOOTH_START_TERRAINS, getSmoothStartTerrain } from './scenario.js?rev=notch-timing-v30';
 import { SCENARIOS, ROUTE_CONTEXT, getScenario, scenarioAudioPath } from './credentialScenario.js?rev=smooth-start-v19-cir-incoming-clickfix';
 
 const $ = (q) => document.querySelector(q);
@@ -798,7 +798,7 @@ function renderSmoothStartPanel(state){
   const guide=$('#smooth-guide');if(!guide)return;
   const baseline=['制动保压查询尾压',state.tailBaselineQueryAttempted,state.tailBaselineQueryAttempted?`基准 ${Math.round(state.tailBaselinePressure||0)} kPa`:'自阀制动位查询'];
   const release=['缓解自阀再查尾压',state.tailPressureRiseCorrect,state.tailReleaseQueryAttempted?`上升 ${Math.round(state.tailPressureRise||0)} kPa（需>20）`:'缓解后查询，上升必须>20 kPa'];
-  const notchOne=['单阀缓解与1.0级',state.singleValveNotchSynchronized&&state.notchOneHoldCorrect,state.singleValveNotchSynchronized?(state.notchOneHoldCorrect?'2秒内配合，已保持1～2秒':'已配合，等待牵引电流上升'):'先后不限，间隔不得超过2秒'];
+  const notchOne=['单阀缓解与1.0级',state.singleValveNotchSynchronized&&state.notchOneHoldCorrect,state.singleValveNotchSynchronized?(state.notchOneHoldCorrect?'已在2秒内投入并确认电流上升':'已在2秒内投入，等待牵引电流上升'):'先缓解单阀，再于2秒内置1.0级'];
   const notchTwo=['2.0级与全列起动',state.notchTwoSequenceCorrect&&state.wholeTrainStarted,`${startedCars}/${state.consistCars||12}辆${state.notchTwoSequenceCorrect?' · 顺序正确':''}`];
   const rear=['后部瞭望确认',state.rearLookCompleted,state.rearLookCompleted?'已确认全列起动':'全列起动后使用左后或右后瞭望'];
   const progressive=['2.0→3.0→4.0级',state.progressiveToFourCorrect,state.progressiveToFourCorrect?'逐级加速完成':'不得跳级，后部瞭望后逐级加载'];

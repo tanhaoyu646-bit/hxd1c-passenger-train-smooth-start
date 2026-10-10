@@ -165,21 +165,34 @@ pressureBoundary.state.tailPipe = pressureBoundary.state.tailBaselinePressure + 
 assert.equal(pressureBoundary.command('tail-query', pressureBoundary.state.tailPipe), false);
 assert.equal(pressureBoundary.state.tailPressureRiseCorrect, false, '尾压上升等于20 kPa不得分');
 
-for (const order of ['brake-first', 'traction-first']) {
-  const sync = new TrainSimulation();
-  sync.command('terrain-select', 'level');
-  sync.command('parking-release');
-  sync.command('tail-query', sync.state.tailPipe);
-  sync.command('auto-brake', 0);
-  tickFor(sync, 6);
-  sync.command('tail-query', sync.state.tailPipe);
-  if (order === 'brake-first') {
-    sync.command('independent-brake', 0); tickFor(sync, 1.9); sync.command('traction', 1);
-  } else {
-    sync.command('traction', 1); tickFor(sync, 1.9); sync.command('independent-brake', 0);
-  }
-  assert.equal(sync.state.singleValveNotchSynchronized, true, `${order}应在2秒窗口内合格`);
-}
+const brakeFirst = new TrainSimulation();
+brakeFirst.command('terrain-select', 'level');
+brakeFirst.command('parking-release');
+brakeFirst.command('tail-query', brakeFirst.state.tailPipe);
+brakeFirst.command('auto-brake', 0);
+tickFor(brakeFirst, 6);
+brakeFirst.command('tail-query', brakeFirst.state.tailPipe);
+brakeFirst.command('independent-brake', 0);
+tickFor(brakeFirst, 1.9);
+brakeFirst.command('traction', 1);
+assert.equal(brakeFirst.state.singleValveNotchSynchronized, true, '单阀缓解后2秒内投入1.0级应合格');
+tickFor(brakeFirst, 3.2);
+assert.equal(brakeFirst.state.tractionCurrentRising, true);
+brakeFirst.command('traction', 2);
+assert.equal(brakeFirst.state.notchOneHoldSeconds > 2, true, '回归场景应让1.0级停留超过2秒');
+assert.equal(brakeFirst.state.notchOneHoldCorrect, true, '1.0级停留超过2秒不应失分');
+
+const tractionFirst = new TrainSimulation();
+tractionFirst.command('terrain-select', 'level');
+tractionFirst.command('parking-release');
+tractionFirst.command('tail-query', tractionFirst.state.tailPipe);
+tractionFirst.command('auto-brake', 0);
+tickFor(tractionFirst, 6);
+tractionFirst.command('tail-query', tractionFirst.state.tailPipe);
+tractionFirst.command('traction', 1);
+tickFor(tractionFirst, 1.9);
+tractionFirst.command('independent-brake', 0);
+assert.equal(tractionFirst.state.singleValveNotchSynchronized, false, '牵引先于单阀缓解不应满足规定顺序');
 
 const delayed = new TrainSimulation();
 delayed.command('terrain-select', 'level');
@@ -207,4 +220,4 @@ assert.equal(TRAIN_DYNAMICS.totalMassKg, 850000);
 assert.equal(TRAIN_DYNAMICS.tractionForcePerNotchN * TRAIN_DYNAMICS.tractionNotches >= 510000, true, '七级牵引应接近HXD1C最大起动牵引力');
 assert.equal(PROCEDURE.reduce((sum, [, , weight]) => sum + weight, 0), 100);
 
-console.log('Training scenarios valid: four workflows, strict tail-pressure rise, 2-second coordination, 10-second traction timing, LKJ limits, and assessment soft gates passed.');
+console.log('Training scenarios valid: four workflows, strict tail-pressure rise, brake-first 2-second coordination without a dwell cap, 10-second traction timing, LKJ limits, and assessment soft gates passed.');

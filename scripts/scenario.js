@@ -92,7 +92,7 @@ export const SMOOTH_START_TERRAINS = Object.freeze({
     gradePermille: 0,
     requiredStartNotch: 1,
     initialIndependentBrake: 2,
-    note: '制动保压时先查询尾部风压；缓解自阀并复查风压上升后，在2秒内完成单阀缓解与1.0级牵引。',
+    note: '制动保压时先查询尾部风压；缓解自阀并复查风压上升后，缓解单阀并在2秒内投入1.0级牵引。',
   }),
   uphill: Object.freeze({
     id: 'uphill',
@@ -101,7 +101,7 @@ export const SMOOTH_START_TERRAINS = Object.freeze({
     gradePermille: 4,
     requiredStartNotch: 1,
     initialIndependentBrake: 2,
-    note: '制动保压时先查询尾部风压；在2秒内完成单阀缓解与不高于1.0级牵引，保持1～2秒后再缓解自阀。',
+    note: '制动保压时先查询尾部风压；单阀缓解后2秒内投入不高于1.0级牵引，确认牵引电流上升后再缓解自阀。',
   }),
 });
 

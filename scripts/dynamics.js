@@ -122,7 +122,8 @@ export class TrainSimulation {
   refreshSingleValveNotchSync() {
     const s = this.state;
     if (s.independentBrakeReleasedAt == null || s.notchOneAppliedAt == null) return;
-    s.singleValveNotchSynchronized = Math.abs(s.independentBrakeReleasedAt - s.notchOneAppliedAt) <= 2;
+    const tractionLag = s.notchOneAppliedAt - s.independentBrakeReleasedAt;
+    s.singleValveNotchSynchronized = tractionLag >= 0 && tractionLag <= 2;
   }
   lockAssessmentScore(index, reason) {
     if (!this.isAssessment()) return;
@@ -770,9 +771,8 @@ export class TrainSimulation {
         if (this.startMode() === 'uphill' && s.notchOneAppliedAt != null) {
           s.notchOneHoldAttempted = true;
           s.notchOneHoldSeconds = s.elapsed - s.notchOneAppliedAt;
-          s.notchOneHoldCorrect = s.notchOneHoldSeconds >= 1
-            && s.notchOneHoldSeconds <= 2
-            && s.tractionCurrentRising;
+          // 1～2秒是单阀缓解后投入1.0级的动作窗口，不是1.0级的最长停留时间。
+          s.notchOneHoldCorrect = Boolean(s.tractionCurrentRising);
         }
         if (this.startMode() === 'uphill' && !s.tractionCurrentRising && s.trainingScope === 'smooth-only') {
           if (!s.assessmentSequenceErrors.includes('上坡道未建立牵引电流即缓解自阀')) s.assessmentSequenceErrors.push('上坡道未建立牵引电流即缓解自阀');
@@ -826,8 +826,6 @@ export class TrainSimulation {
           s.notchOneHoldAttempted = true;
           s.notchOneHoldSeconds = s.notchOneAppliedAt == null ? null : s.elapsed - s.notchOneAppliedAt;
           s.notchOneHoldCorrect = s.notchOneHoldSeconds != null
-            && s.notchOneHoldSeconds >= 1
-            && s.notchOneHoldSeconds <= 2
             && s.tractionCurrentRising;
         }
         const orderCorrect = this.startMode() === 'uphill'
